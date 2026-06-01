@@ -83,6 +83,35 @@ export type MaterialSummary = {
   gaps: string[];
 };
 
+export type InterviewNoteForm = {
+  sourceMaterialId: string;
+  rawText: string;
+  intervieweeIdentity: string;
+  interviewTime: string;
+  interviewLocation: string;
+  interviewTopic: string;
+  isAnonymous: boolean;
+};
+
+export type InterviewNote = {
+  id: string;
+  form: InterviewNoteForm;
+  markdown: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type InterviewNoteSummary = {
+  basicInfo: string[];
+  coreSummary: string;
+  keyFacts: string[];
+  importantViews: string[];
+  cases: string[];
+  quotes: string[];
+  researchLinks: string[];
+  followUpSuggestions: string[];
+};
+
 export type ProjectRecord = ProjectInput & {
   id: string;
   stage: string;

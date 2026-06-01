@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { BookOpen, Bot, CheckCircle2, FileText, Lightbulb, Loader2, MessagesSquare, Trash2 } from "lucide-react";
+import { BookOpen, Bot, CheckCircle2, ClipboardList, FileText, Lightbulb, Loader2, MessagesSquare, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,9 @@ import { Textarea } from "@/components/ui/textarea";
 import type {
   InterviewOutline,
   InterviewOutlineForm,
+  InterviewNote,
+  InterviewNoteForm,
+  InterviewNoteSummary,
   InterviewTargetType,
   MaterialForm,
   MaterialItem,
@@ -24,7 +27,7 @@ import type {
 const targetTypes: InterviewTargetType[] = ["基层干部", "村干部/社区干部", "驻村干部", "普通群众", "政府工作人员", "专家学者", "自定义对象"];
 const materialTypes: MaterialType[] = ["访谈文本", "政策文件", "实践日志", "新闻资料", "其他"];
 
-type ModuleKey = "topics" | "plan" | "interview" | "materials";
+type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes";
 
 const defaultInterviewForm: InterviewOutlineForm = {
   targetType: "基层干部",
@@ -42,6 +45,16 @@ const emptyMaterialForm: MaterialForm = {
   tags: ""
 };
 
+const emptyInterviewNoteForm: InterviewNoteForm = {
+  sourceMaterialId: "",
+  rawText: "",
+  intervieweeIdentity: "",
+  interviewTime: "",
+  interviewLocation: "",
+  interviewTopic: "",
+  isAnonymous: false
+};
+
 export default function ProjectWorkspacePage({ params }: { params: { id: string } }) {
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [activeModule, setActiveModule] = useState<ModuleKey>("topics");
@@ -56,9 +69,15 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   const [materialForm, setMaterialForm] = useState<MaterialForm>(emptyMaterialForm);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [interviewNotes, setInterviewNotes] = useState<InterviewNote[]>([]);
+  const [interviewNoteForm, setInterviewNoteForm] = useState<InterviewNoteForm>(emptyInterviewNoteForm);
+  const [interviewNoteDraft, setInterviewNoteDraft] = useState("");
+  const [editingInterviewNoteId, setEditingInterviewNoteId] = useState<string | null>(null);
+  const [selectedInterviewNoteId, setSelectedInterviewNoteId] = useState<string | null>(null);
 
   const interviewStorageKey = `interview-outline:${params.id}`;
   const materialsStorageKey = `materials-library:${params.id}`;
+  const interviewNotesStorageKey = `interview-notes:${params.id}`;
 
   async function loadProject() {
     setError("");
@@ -107,6 +126,19 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     }
   }, [materialsStorageKey]);
 
+  useEffect(() => {
+    const saved = window.localStorage.getItem(interviewNotesStorageKey);
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved) as InterviewNote[];
+      setInterviewNotes(parsed);
+      setSelectedInterviewNoteId(parsed[0]?.id || null);
+    } catch {
+      window.localStorage.removeItem(interviewNotesStorageKey);
+    }
+  }, [interviewNotesStorageKey]);
+
   const projectInput = useMemo(() => {
     if (!project) return [];
     return [
@@ -120,11 +152,19 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   }, [project]);
 
   const selectedMaterial = materials.find((item) => item.id === selectedMaterialId) || null;
+  const selectedInterviewNote = interviewNotes.find((item) => item.id === selectedInterviewNoteId) || null;
+  const interviewTextMaterials = materials.filter((item) => item.type === "访谈文本");
 
   function saveMaterials(nextMaterials: MaterialItem[], nextSelectedId = selectedMaterialId) {
     setMaterials(nextMaterials);
     window.localStorage.setItem(materialsStorageKey, JSON.stringify(nextMaterials));
     if (nextSelectedId !== selectedMaterialId) setSelectedMaterialId(nextSelectedId);
+  }
+
+  function saveInterviewNotes(nextNotes: InterviewNote[], nextSelectedId = selectedInterviewNoteId) {
+    setInterviewNotes(nextNotes);
+    window.localStorage.setItem(interviewNotesStorageKey, JSON.stringify(nextNotes));
+    if (nextSelectedId !== selectedInterviewNoteId) setSelectedInterviewNoteId(nextSelectedId);
   }
 
   async function runAction(endpoint: string, loadingLabel: string, body?: unknown) {
@@ -282,6 +322,113 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     saveMaterials(nextMaterials, material.id);
   }
 
+  function selectInterviewTextMaterial(materialId: string) {
+    const material = materials.find((item) => item.id === materialId);
+    setInterviewNoteForm((current) => ({
+      ...current,
+      sourceMaterialId: materialId,
+      rawText: material?.content || current.rawText,
+      interviewTopic: current.interviewTopic || material?.title || ""
+    }));
+  }
+
+  function generateInterviewNote() {
+    if (!project) return;
+    if (!interviewNoteForm.rawText.trim()) {
+      setError("请选择访谈文本资料或手动粘贴访谈文本");
+      return;
+    }
+    if (!interviewNoteForm.intervieweeIdentity.trim() || !interviewNoteForm.interviewTopic.trim()) {
+      setError("请填写访谈对象身份和访谈主题");
+      return;
+    }
+
+    const markdown = interviewNoteSummaryToMarkdown(mockInterviewNoteSummary(project, interviewNoteForm));
+    const now = new Date().toISOString();
+
+    if (editingInterviewNoteId) {
+      const nextNotes = interviewNotes.map((note) =>
+        note.id === editingInterviewNoteId
+          ? {
+              ...note,
+              form: interviewNoteForm,
+              markdown,
+              updatedAt: now
+            }
+          : note
+      );
+      saveInterviewNotes(nextNotes, editingInterviewNoteId);
+    } else {
+      const note: InterviewNote = {
+        id: crypto.randomUUID(),
+        form: interviewNoteForm,
+        markdown,
+        createdAt: now,
+        updatedAt: now
+      };
+      saveInterviewNotes([note, ...interviewNotes], note.id);
+      setEditingInterviewNoteId(note.id);
+    }
+
+    setInterviewNoteDraft(markdown);
+    setError("");
+  }
+
+  function saveInterviewNoteDraft() {
+    if (!interviewNoteDraft.trim()) {
+      setError("请先生成或填写访谈纪要内容");
+      return;
+    }
+
+    const now = new Date().toISOString();
+    if (editingInterviewNoteId) {
+      const nextNotes = interviewNotes.map((note) =>
+        note.id === editingInterviewNoteId
+          ? {
+              ...note,
+              form: interviewNoteForm,
+              markdown: interviewNoteDraft,
+              updatedAt: now
+            }
+          : note
+      );
+      saveInterviewNotes(nextNotes, editingInterviewNoteId);
+    } else {
+      const note: InterviewNote = {
+        id: crypto.randomUUID(),
+        form: interviewNoteForm,
+        markdown: interviewNoteDraft,
+        createdAt: now,
+        updatedAt: now
+      };
+      saveInterviewNotes([note, ...interviewNotes], note.id);
+      setEditingInterviewNoteId(note.id);
+    }
+    setError("");
+  }
+
+  function newInterviewNote() {
+    setInterviewNoteForm(emptyInterviewNoteForm);
+    setInterviewNoteDraft("");
+    setEditingInterviewNoteId(null);
+  }
+
+  function editInterviewNote(note: InterviewNote) {
+    setSelectedInterviewNoteId(note.id);
+    setEditingInterviewNoteId(note.id);
+    setInterviewNoteForm(note.form);
+    setInterviewNoteDraft(note.markdown);
+  }
+
+  function deleteInterviewNote(id: string) {
+    const nextNotes = interviewNotes.filter((note) => note.id !== id);
+    const nextSelectedId = selectedInterviewNoteId === id ? nextNotes[0]?.id || null : selectedInterviewNoteId;
+    saveInterviewNotes(nextNotes, nextSelectedId);
+    if (editingInterviewNoteId === id) {
+      newInterviewNote();
+    }
+  }
+
   if (loading) {
     return <main className="p-8 text-muted-foreground">正在加载工作台...</main>;
   }
@@ -328,6 +475,9 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               <NavButton active={activeModule === "materials"} onClick={() => setActiveModule("materials")}>
                 <BookOpen className="h-4 w-4" /> 资料库
               </NavButton>
+              <NavButton active={activeModule === "notes"} onClick={() => setActiveModule("notes")}>
+                <ClipboardList className="h-4 w-4" /> 访谈纪要
+              </NavButton>
             </CardContent>
           </Card>
 
@@ -372,6 +522,26 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               selectedMaterialId={selectedMaterialId}
             />
           ) : null}
+          {activeModule === "notes" ? (
+            <InterviewNotesModule
+              editingNoteId={editingInterviewNoteId}
+              form={interviewNoteForm}
+              interviewTextMaterials={interviewTextMaterials}
+              notes={interviewNotes}
+              noteDraft={interviewNoteDraft}
+              onDelete={deleteInterviewNote}
+              onEdit={editInterviewNote}
+              onFormChange={setInterviewNoteForm}
+              onGenerate={generateInterviewNote}
+              onNew={newInterviewNote}
+              onSave={saveInterviewNoteDraft}
+              onSelect={setSelectedInterviewNoteId}
+              onSelectMaterial={selectInterviewTextMaterial}
+              selectedNote={selectedInterviewNote}
+              selectedNoteId={selectedInterviewNoteId}
+              setNoteDraft={setInterviewNoteDraft}
+            />
+          ) : null}
         </section>
 
         <aside>
@@ -382,7 +552,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>当前支持：生成候选选题、调研方案、访谈提纲和资料 mock 摘要。</p>
+              <p>当前支持：生成候选选题、调研方案、访谈提纲、资料 mock 摘要和访谈纪要。</p>
               <p>资料库暂时只管理文本资料，保存在浏览器本地存储。</p>
               <p>未配置 OPENAI_API_KEY 时，选题和方案会自动使用 mock 数据。</p>
             </CardContent>
@@ -538,6 +708,204 @@ function MaterialsModule({ editingMaterialId, form, materials, onCancelEdit, onD
   );
 }
 
+function InterviewNotesModule({
+  editingNoteId,
+  form,
+  interviewTextMaterials,
+  notes,
+  noteDraft,
+  onDelete,
+  onEdit,
+  onFormChange,
+  onGenerate,
+  onNew,
+  onSave,
+  onSelect,
+  onSelectMaterial,
+  selectedNote,
+  selectedNoteId,
+  setNoteDraft
+}: {
+  editingNoteId: string | null;
+  form: InterviewNoteForm;
+  interviewTextMaterials: MaterialItem[];
+  notes: InterviewNote[];
+  noteDraft: string;
+  onDelete: (id: string) => void;
+  onEdit: (note: InterviewNote) => void;
+  onFormChange: (form: InterviewNoteForm) => void;
+  onGenerate: () => void;
+  onNew: () => void;
+  onSave: () => void;
+  onSelect: (id: string) => void;
+  onSelectMaterial: (id: string) => void;
+  selectedNote: InterviewNote | null;
+  selectedNoteId: string | null;
+  setNoteDraft: (value: string) => void;
+}) {
+  function updateForm<K extends keyof InterviewNoteForm>(key: K, value: InterviewNoteForm[K]) {
+    onFormChange({ ...form, [key]: value });
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle>访谈纪要</CardTitle>
+          <p className="mt-2 text-sm text-muted-foreground">从资料库访谈文本或手动粘贴文本生成结构化 mock 访谈纪要。</p>
+        </div>
+        <Button onClick={onNew} variant="outline">
+          新建纪要
+        </Button>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-4 rounded-lg border bg-background p-4 md:grid-cols-2">
+          <div className="grid gap-2">
+            <Label>选择资料库访谈文本</Label>
+            <select
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => onSelectMaterial(event.target.value)}
+              value={form.sourceMaterialId}
+            >
+              <option value="">不选择，手动粘贴</option>
+              {interviewTextMaterials.map((material) => (
+                <option key={material.id} value={material.id}>
+                  {material.title}
+                </option>
+              ))}
+            </select>
+            {!interviewTextMaterials.length ? <p className="text-xs text-muted-foreground">资料库中暂无“访谈文本”类型资料。</p> : null}
+          </div>
+          <div className="grid gap-2">
+            <Label>访谈对象身份</Label>
+            <input
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateForm("intervieweeIdentity", event.target.value)}
+              placeholder="如：村干部、社区居民、驻村干部"
+              value={form.intervieweeIdentity}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>访谈时间</Label>
+            <input
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateForm("interviewTime", event.target.value)}
+              type="datetime-local"
+              value={form.interviewTime}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>访谈地点</Label>
+            <input
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateForm("interviewLocation", event.target.value)}
+              value={form.interviewLocation}
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>访谈主题</Label>
+            <input
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateForm("interviewTopic", event.target.value)}
+              value={form.interviewTopic}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input checked={form.isAnonymous} className="h-4 w-4" onChange={(event) => updateForm("isAnonymous", event.target.checked)} type="checkbox" />
+            是否匿名
+          </label>
+          <div className="grid gap-2 md:col-span-2">
+            <Label>访谈文本</Label>
+            <Textarea
+              className="min-h-[180px]"
+              onChange={(event) => updateForm("rawText", event.target.value)}
+              placeholder="可从资料库选择访谈文本，也可以在这里手动粘贴访谈原文。"
+              value={form.rawText}
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
+            <Button onClick={onGenerate}>{editingNoteId ? "重新生成访谈纪要" : "生成访谈纪要"}</Button>
+            <Button disabled={!noteDraft} onClick={onSave} variant="outline">
+              保存纪要
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="rounded-lg border bg-background p-4">
+            <h3 className="mb-3 text-base font-semibold">纪要列表</h3>
+            <div className="grid gap-3">
+              {notes.map((note) => (
+                <button
+                  className={`rounded-md border p-3 text-left text-sm ${selectedNoteId === note.id ? "border-primary bg-primary/5" : "bg-card hover:bg-muted"}`}
+                  key={note.id}
+                  onClick={() => onSelect(note.id)}
+                  type="button"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-semibold">{note.form.intervieweeIdentity || "未填写身份"}</p>
+                    <span className="text-xs text-muted-foreground">{note.form.isAnonymous ? "匿名" : "实名/可识别"}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">主题：{note.form.interviewTopic || "未填写"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">访谈时间：{note.form.interviewTime || "未填写"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">创建：{new Date(note.createdAt).toLocaleString("zh-CN")}</p>
+                </button>
+              ))}
+              {!notes.length ? <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">还没有访谈纪要，先生成一份。</div> : null}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-background p-4">
+            <h3 className="mb-3 text-base font-semibold">纪要详情</h3>
+            {selectedNote ? (
+              <div className="grid gap-4 text-sm">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-lg font-semibold">{selectedNote.form.interviewTopic || "未填写主题"}</h4>
+                    <p className="text-muted-foreground">
+                      {selectedNote.form.intervieweeIdentity || "未填写身份"} ｜ {selectedNote.form.interviewTime || "未填写时间"} ｜ {selectedNote.form.isAnonymous ? "匿名" : "非匿名"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => onEdit(selectedNote)} variant="outline">
+                      编辑
+                    </Button>
+                    <Button onClick={() => onDelete(selectedNote.id)} variant="outline">
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      删除
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 font-medium">纪要内容</p>
+                  <div className="markdown-preview min-h-80 rounded-md border bg-card p-3">
+                    <ReactMarkdown>{selectedNote.markdown}</ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">选择左侧纪要后查看详情。</div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div>
+            <p className="mb-2 text-sm font-medium">纪要编辑</p>
+            <Textarea className="min-h-[420px] font-mono" onChange={(event) => setNoteDraft(event.target.value)} value={noteDraft} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">编辑预览</p>
+            <div className="markdown-preview min-h-[420px] rounded-md border bg-background p-4 text-sm">
+              {noteDraft ? <ReactMarkdown>{noteDraft}</ReactMarkdown> : <p className="text-muted-foreground">生成后将在这里预览，也可以手动编辑后保存。</p>}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function mockInterviewOutline(project: ProjectRecord, form: InterviewOutlineForm): InterviewOutline {
   const target = form.targetType === "自定义对象" ? form.customTarget || "自定义对象" : form.targetType;
   const focus = form.focusQuestions || `围绕${project.theme}了解实际情况、主要困难和改进建议。`;
@@ -605,4 +973,75 @@ ${summary.relatedResearchQuestions.map((item) => `- ${item}`).join("\n")}
 
 ## 材料不足提示
 ${summary.gaps.map((item) => `- ${item}`).join("\n")}`;
+}
+
+function mockInterviewNoteSummary(project: ProjectRecord, form: InterviewNoteForm): InterviewNoteSummary {
+  const text = form.rawText.replace(/\s+/g, " ").trim();
+  const shortText = text.length > 140 ? `${text.slice(0, 140)}...` : text || "原始访谈文本较短，暂未提取到充分内容。";
+  const identity = form.isAnonymous ? `${form.intervieweeIdentity || "访谈对象"}（匿名）` : form.intervieweeIdentity || "未填写身份";
+
+  return {
+    basicInfo: [
+      `访谈对象身份：${identity}`,
+      `访谈时间：${form.interviewTime || "未填写"}`,
+      `访谈地点：${form.interviewLocation || "未填写"}`,
+      `访谈主题：${form.interviewTopic || project.theme}`,
+      `是否匿名：${form.isAnonymous ? "是" : "否"}`
+    ],
+    coreSummary: `本次访谈围绕“${form.interviewTopic || project.theme}”展开，受访者从自身经历和观察出发，提供了与${project.location}${project.theme}相关的一线反馈。mock 摘要提炼的核心内容为：${shortText}`,
+    keyFacts: [
+      `材料显示，${project.location}在“${project.theme}”相关工作中已经形成一定实践基础。`,
+      "受访者提到的问题主要集中在资源协调、执行落地和群众反馈等方面。",
+      "访谈文本可作为后续报告中描述现状和问题表现的定性材料。"
+    ],
+    importantViews: [
+      "受访者认为相关工作需要更贴近实际需求，避免只停留在形式层面。",
+      "受访者强调不同主体之间的协同会影响实践效果。",
+      "受访者建议后续改进应优先关注可持续机制和具体执行细节。"
+    ],
+    cases: [
+      "可从原始文本中继续提取一个具体人物、事件或场景作为典型案例。",
+      "如文本中包含时间、地点、行动和结果，可整理为报告中的案例段落。"
+    ],
+    quotes: [
+      text ? `“${text.slice(0, 60)}${text.length > 60 ? "..." : ""}”` : "原文不足，建议补充可引用原话。",
+      "建议后续人工核对原文，筛选更完整、表达更自然的直接引语。"
+    ],
+    researchLinks: project.selectedTopic
+      ? [project.selectedTopic.researchQuestion, `可用于回应主选题“${project.selectedTopic.title}”中的对象体验、现实困难或改进路径。`]
+      : [`可关联到“${project.theme}”的现状、问题和改进建议。`, "建议先确认主选题，再进一步标注材料与研究问题的关系。"],
+    followUpSuggestions: [
+      "追问受访者提到的问题是否具有普遍性，是否还有其他群体持不同意见。",
+      "补充询问具体案例的时间、地点、参与主体和结果。",
+      "继续核实材料中涉及的数据、政策或事实来源。"
+    ]
+  };
+}
+
+function interviewNoteSummaryToMarkdown(summary: InterviewNoteSummary) {
+  return `# 访谈纪要
+
+## 访谈基本信息
+${summary.basicInfo.map((item) => `- ${item}`).join("\n")}
+
+## 核心内容摘要
+${summary.coreSummary}
+
+## 关键事实
+${summary.keyFacts.map((item) => `- ${item}`).join("\n")}
+
+## 重要观点
+${summary.importantViews.map((item) => `- ${item}`).join("\n")}
+
+## 典型案例
+${summary.cases.map((item) => `- ${item}`).join("\n")}
+
+## 可引用原话
+${summary.quotes.map((item) => `- ${item}`).join("\n")}
+
+## 与研究问题的关联
+${summary.researchLinks.map((item) => `- ${item}`).join("\n")}
+
+## 后续追问建议
+${summary.followUpSuggestions.map((item) => `- ${item}`).join("\n")}`;
 }
