@@ -1,5 +1,8 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getProject } from "@/lib/projectStore";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {

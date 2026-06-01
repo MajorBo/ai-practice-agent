@@ -7,9 +7,9 @@ type JsonResult<T> =
   | { ok: true; data: T; raw: string }
   | { ok: false; raw: string; error: string };
 
-const provider = process.env.AI_PROVIDER || "deepseek";
-
 function getClient() {
+  const provider = process.env.AI_PROVIDER || "deepseek";
+
   if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY) {
     return {
       client: new OpenAI({
@@ -153,6 +153,8 @@ export async function generateInterviewOutlineWithAI(project: ProjectRecord, for
 }
 
 export function getAIProviderStatus() {
+  const provider = process.env.AI_PROVIDER || "deepseek";
+
   return {
     provider,
     hasDeepSeekKey: Boolean(process.env.DEEPSEEK_API_KEY),

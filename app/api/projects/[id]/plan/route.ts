@@ -4,6 +4,9 @@ import { mockPlan } from "@/lib/aiService";
 import { getProject, updateProject } from "@/lib/projectStore";
 import type { ProjectInput, ResearchPlanPayload, TopicCandidate } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 type GenerationSource = "ai" | "mock-missing-key" | "mock-api-error";
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {

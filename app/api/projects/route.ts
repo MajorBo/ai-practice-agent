@@ -2,6 +2,9 @@
 import { createProject, listProjects } from "@/lib/projectStore";
 import type { ProjectInput } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 function toProjectInput(body: Partial<ProjectInput>): ProjectInput {
   return {
     name: body.name?.trim() || "",

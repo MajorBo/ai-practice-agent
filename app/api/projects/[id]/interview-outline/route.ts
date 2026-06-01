@@ -4,6 +4,7 @@ import { getProject } from "@/lib/projectStore";
 import type { InterviewOutlineForm } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {

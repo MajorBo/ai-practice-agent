@@ -1,7 +1,10 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { generateTopicCandidates } from "@/lib/aiService";
 import { getProject, updateProject } from "@/lib/projectStore";
 import type { ProjectInput } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   try {
