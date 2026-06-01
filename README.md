@@ -65,6 +65,7 @@ pnpm dev
 - 访谈提纲模块：可选择访谈对象类型、填写访谈时长、敏感议题和重点问题，生成 mock 结构化访谈提纲，并支持编辑保存。
 - 资料库模块：支持新增文本资料、列表展示、详情查看、编辑删除和 mock 摘要生成，资料保存到浏览器本地存储。
 - 访谈纪要模块：支持从资料库选择访谈文本或手动粘贴原文，填写访谈对象信息，生成、编辑、保存和删除 mock 结构化访谈纪要。
+- 报告大纲模块：基于项目基础信息、主选题、调研方案、资料摘要和访谈纪要生成 mock 结构化报告大纲，支持编辑、保存、重新生成和删除。
 - `lib/aiService.ts`：统一封装 OpenAI 调用，包含 RateLimit 重试；没有 `OPENAI_API_KEY` 或 AI 调用失败时返回 mock 数据。
 - `lib/projectStore.ts`：项目数据存储适配层；有 `DATABASE_URL` 时使用 Prisma/PostgreSQL，没有时使用本地 JSON 文件。
 
@@ -80,6 +81,7 @@ HTML 单文件版使用浏览器 `localStorage` 保存数据，不需要 Node.js
 - 访谈提纲：保存到浏览器 `localStorage`。
 - 资料库文本资料：保存到浏览器 `localStorage`。
 - 访谈纪要：保存到浏览器 `localStorage`。
+- 报告大纲：保存到浏览器 `localStorage`。
 - mock AI 结果：不调用真实 AI API。
 
 ## TODO

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
-import { BookOpen, Bot, CheckCircle2, ClipboardList, FileText, Lightbulb, Loader2, MessagesSquare, Trash2 } from "lucide-react";
+import { BookOpen, Bot, CheckCircle2, ClipboardList, FileText, Lightbulb, Loader2, MessagesSquare, ScrollText, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -21,13 +21,14 @@ import type {
   MaterialSummary,
   MaterialType,
   ProjectRecord,
+  ReportOutline,
   TopicCandidate
 } from "@/lib/types";
 
 const targetTypes: InterviewTargetType[] = ["基层干部", "村干部/社区干部", "驻村干部", "普通群众", "政府工作人员", "专家学者", "自定义对象"];
 const materialTypes: MaterialType[] = ["访谈文本", "政策文件", "实践日志", "新闻资料", "其他"];
 
-type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes";
+type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes" | "outline";
 
 const defaultInterviewForm: InterviewOutlineForm = {
   targetType: "基层干部",
@@ -74,10 +75,13 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   const [interviewNoteDraft, setInterviewNoteDraft] = useState("");
   const [editingInterviewNoteId, setEditingInterviewNoteId] = useState<string | null>(null);
   const [selectedInterviewNoteId, setSelectedInterviewNoteId] = useState<string | null>(null);
+  const [reportOutline, setReportOutline] = useState<ReportOutline | null>(null);
+  const [reportOutlineDraft, setReportOutlineDraft] = useState("");
 
   const interviewStorageKey = `interview-outline:${params.id}`;
   const materialsStorageKey = `materials-library:${params.id}`;
   const interviewNotesStorageKey = `interview-notes:${params.id}`;
+  const reportOutlineStorageKey = `report-outline:${params.id}`;
 
   async function loadProject() {
     setError("");
@@ -138,6 +142,19 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
       window.localStorage.removeItem(interviewNotesStorageKey);
     }
   }, [interviewNotesStorageKey]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(reportOutlineStorageKey);
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved) as ReportOutline;
+      setReportOutline(parsed);
+      setReportOutlineDraft(parsed.markdown || "");
+    } catch {
+      window.localStorage.removeItem(reportOutlineStorageKey);
+    }
+  }, [reportOutlineStorageKey]);
 
   const projectInput = useMemo(() => {
     if (!project) return [];
@@ -429,6 +446,33 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     }
   }
 
+  function saveReportOutline(markdown = reportOutlineDraft) {
+    if (!markdown.trim()) {
+      setError("请先生成或填写报告大纲");
+      return;
+    }
+    const nextOutline = {
+      markdown,
+      savedAt: new Date().toISOString()
+    };
+    setReportOutline(nextOutline);
+    setReportOutlineDraft(markdown);
+    window.localStorage.setItem(reportOutlineStorageKey, JSON.stringify(nextOutline));
+    setError("");
+  }
+
+  function generateReportOutline() {
+    if (!project) return;
+    const markdown = mockReportOutline(project, materials, interviewNotes);
+    saveReportOutline(markdown);
+  }
+
+  function deleteReportOutline() {
+    setReportOutline(null);
+    setReportOutlineDraft("");
+    window.localStorage.removeItem(reportOutlineStorageKey);
+  }
+
   if (loading) {
     return <main className="p-8 text-muted-foreground">正在加载工作台...</main>;
   }
@@ -477,6 +521,9 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               </NavButton>
               <NavButton active={activeModule === "notes"} onClick={() => setActiveModule("notes")}>
                 <ClipboardList className="h-4 w-4" /> 访谈纪要
+              </NavButton>
+              <NavButton active={activeModule === "outline"} onClick={() => setActiveModule("outline")}>
+                <ScrollText className="h-4 w-4" /> 报告大纲
               </NavButton>
             </CardContent>
           </Card>
@@ -542,6 +589,20 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               setNoteDraft={setInterviewNoteDraft}
             />
           ) : null}
+          {activeModule === "outline" ? (
+            <ReportOutlineModule
+              hasPlan={Boolean(project.researchPlan)}
+              hasTopic={Boolean(project.selectedTopic)}
+              interviewNoteCount={interviewNotes.length}
+              materialCount={materials.length}
+              onDelete={deleteReportOutline}
+              onGenerate={generateReportOutline}
+              onSave={() => saveReportOutline()}
+              outlineDraft={reportOutlineDraft}
+              savedAt={reportOutline?.savedAt || ""}
+              setOutlineDraft={setReportOutlineDraft}
+            />
+          ) : null}
         </section>
 
         <aside>
@@ -552,7 +613,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>当前支持：生成候选选题、调研方案、访谈提纲、资料 mock 摘要和访谈纪要。</p>
+              <p>当前支持：生成候选选题、调研方案、访谈提纲、资料 mock 摘要、访谈纪要和报告大纲。</p>
               <p>资料库暂时只管理文本资料，保存在浏览器本地存储。</p>
               <p>未配置 OPENAI_API_KEY 时，选题和方案会自动使用 mock 数据。</p>
             </CardContent>
@@ -906,6 +967,80 @@ function InterviewNotesModule({
   );
 }
 
+function ReportOutlineModule({
+  hasPlan,
+  hasTopic,
+  interviewNoteCount,
+  materialCount,
+  onDelete,
+  onGenerate,
+  onSave,
+  outlineDraft,
+  savedAt,
+  setOutlineDraft
+}: {
+  hasPlan: boolean;
+  hasTopic: boolean;
+  interviewNoteCount: number;
+  materialCount: number;
+  onDelete: () => void;
+  onGenerate: () => void;
+  onSave: () => void;
+  outlineDraft: string;
+  savedAt: string;
+  setOutlineDraft: (value: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle>报告大纲</CardTitle>
+          <p className="mt-2 text-sm text-muted-foreground">基于项目基础信息、主选题、调研方案、资料摘要和访谈纪要生成结构化 mock 大纲。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onGenerate}>{outlineDraft ? "重新生成" : "生成报告大纲"}</Button>
+          <Button disabled={!outlineDraft} onClick={onSave} variant="outline">
+            保存大纲
+          </Button>
+          <Button disabled={!outlineDraft} onClick={onDelete} variant="outline">
+            删除大纲
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-3 rounded-lg border bg-background p-4 text-sm md:grid-cols-4">
+          <StatusItem label="资料数量" value={`${materialCount} 份`} />
+          <StatusItem label="访谈纪要数量" value={`${interviewNoteCount} 份`} />
+          <StatusItem label="主选题" value={hasTopic ? "已有" : "暂无"} />
+          <StatusItem label="调研方案" value={hasPlan ? "已有" : "暂无"} />
+        </div>
+        {savedAt ? <p className="text-xs text-muted-foreground">已保存：{new Date(savedAt).toLocaleString("zh-CN")}</p> : null}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div>
+            <p className="mb-2 text-sm font-medium">大纲编辑</p>
+            <Textarea className="min-h-[560px] font-mono" onChange={(event) => setOutlineDraft(event.target.value)} value={outlineDraft} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">大纲预览</p>
+            <div className="markdown-preview min-h-[560px] rounded-md border bg-background p-4 text-sm">
+              {outlineDraft ? <ReactMarkdown>{outlineDraft}</ReactMarkdown> : <p className="text-muted-foreground">点击“生成报告大纲”后将在这里预览。</p>}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-card p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold">{value}</p>
+    </div>
+  );
+}
+
 function mockInterviewOutline(project: ProjectRecord, form: InterviewOutlineForm): InterviewOutline {
   const target = form.targetType === "自定义对象" ? form.customTarget || "自定义对象" : form.targetType;
   const focus = form.focusQuestions || `围绕${project.theme}了解实际情况、主要困难和改进建议。`;
@@ -1044,4 +1179,123 @@ ${summary.researchLinks.map((item) => `- ${item}`).join("\n")}
 
 ## 后续追问建议
 ${summary.followUpSuggestions.map((item) => `- ${item}`).join("\n")}`;
+}
+
+function mockReportOutline(project: ProjectRecord, materials: MaterialItem[], notes: InterviewNote[]) {
+  const topicTitle = project.selectedTopic?.title || `${project.location}${project.theme}实践调研`;
+  const researchQuestion = project.selectedTopic?.researchQuestion || `围绕${project.theme}梳理现状、问题与改进路径。`;
+  const materialTitles = materials.slice(0, 5).map((item) => `《${item.title}》`).join("、") || "暂无资料库材料";
+  const noteThemes = notes
+    .slice(0, 4)
+    .map((note) => `${note.form.intervieweeIdentity || "访谈对象"}：${note.form.interviewTopic || "未填写主题"}`)
+    .join("；") || "暂无已保存访谈纪要";
+  const summarizedMaterials = materials.filter((item) => item.summary).length;
+
+  return `# ${topicTitle}调研报告大纲
+
+## 报告标题
+${topicTitle}——基于${project.location}社会实践调研的分析
+
+## 摘要方向
+围绕“${project.theme}”和主研究问题“${researchQuestion}”，概括${project.location}相关实践的现实基础、主要问题、受访者观点、典型材料和改进建议。摘要应突出高校社会实践队的实地调研过程，以及资料库和访谈纪要提供的一线证据。
+
+## 一、调研背景与问题提出
+
+### 1.1 项目背景
+写作重点：介绍项目名称“${project.name}”、实践类型“${project.practiceType}”、实践地点“${project.location}”和预期成果“${project.expectedOutcome}”。
+
+可使用材料：
+- 项目基础信息
+- 调研方案中的“调研背景”
+
+### 1.2 研究问题
+写作重点：说明主选题和核心研究问题，明确报告要回答什么。
+
+可使用材料：
+- 主选题：${topicTitle}
+- 研究问题：${researchQuestion}
+
+## 二、调研设计与资料来源
+
+### 2.1 调研方法与过程
+写作重点：说明访谈、资料整理、现场观察等方法如何支撑结论。
+
+可使用材料：
+- 调研方案：${project.researchPlan ? "已有，可提炼方法和日程" : "暂无，需要补充"}
+- 资料库材料：${materialTitles}
+
+### 2.2 材料结构
+写作重点：交代资料数量、访谈纪要数量和材料可信度。
+
+可使用材料：
+- 资料数量：${materials.length} 份
+- 已生成摘要资料：${summarizedMaterials} 份
+- 访谈纪要：${notes.length} 份
+
+## 三、调研发现
+
+### 3.1 现状与已有基础
+写作重点：从政策文件、新闻资料、实践日志和访谈文本中提炼当地实践现状。
+
+可使用材料：
+- ${materialTitles}
+
+### 3.2 主要问题与成因
+写作重点：结合访谈纪要提取高频问题、执行难点、资源约束和主体协同问题。
+
+可使用材料：
+- ${noteThemes}
+
+### 3.3 典型案例与一线反馈
+写作重点：选取 1-2 个具体案例，加入可引用原话，增强报告真实感。
+
+可使用材料：
+- 已保存访谈纪要中的“典型案例”和“可引用原话”
+
+## 四、分析讨论
+
+### 4.1 与研究问题的对应关系
+写作重点：逐条回应“${researchQuestion}”，说明材料如何支撑判断。
+
+可使用材料：
+- 访谈纪要中的“与研究问题的关联”
+- 资料摘要中的“关联研究问题”
+
+### 4.2 影响机制分析
+写作重点：从主体协同、资源配置、政策落地、群众参与等角度解释问题形成原因。
+
+可使用材料：
+- 访谈纪要中的重要观点
+- 资料摘要中的可用于报告的材料点
+
+## 五、对策建议
+
+### 5.1 面向当地实践的改进建议
+写作重点：提出具体、可执行、与问题对应的建议。
+
+可使用材料：
+- 访谈纪要中的后续追问建议
+- 调研方案中的风险预案和预期成果
+
+### 5.2 面向高校实践队的行动建议
+写作重点：总结实践队后续可以继续补充的调研、服务或传播行动。
+
+可使用材料：
+- 项目其他要求：${project.requirements || "暂无"}
+
+## 六、结论
+
+### 6.1 核心结论
+写作重点：用 2-3 条结论回答主研究问题，避免泛泛而谈。
+
+### 6.2 研究不足
+写作重点：说明样本、资料、时间和方法限制。
+
+缺失材料提示：
+- ${project.selectedTopic ? "主选题已具备。" : "缺少主选题，建议先在选题设计中确认。"}
+- ${project.researchPlan ? "调研方案已具备。" : "缺少调研方案，建议先生成或保存调研方案。"}
+- ${materials.length ? "已有资料库材料，但建议继续补充不同类型资料。" : "缺少资料库材料，建议新增访谈文本、政策文件或实践日志。"}
+- ${notes.length ? "已有访谈纪要，可支撑发现章节。" : "缺少访谈纪要，建议先基于访谈文本生成纪要。"}
+- ${summarizedMaterials ? "已有资料摘要，可用于报告材料点。" : "资料摘要不足，建议在资料库中生成 mock 摘要。"}
+`;
 }

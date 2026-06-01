@@ -112,6 +112,11 @@ export type InterviewNoteSummary = {
   followUpSuggestions: string[];
 };
 
+export type ReportOutline = {
+  markdown: string;
+  savedAt: string;
+};
+
 export type ProjectRecord = ProjectInput & {
   id: string;
   stage: string;
