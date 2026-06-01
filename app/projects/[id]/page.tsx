@@ -33,6 +33,7 @@ const targetTypes: InterviewTargetType[] = ["基层干部", "村干部/社区干
 const materialTypes: MaterialType[] = ["访谈文本", "政策文件", "实践日志", "新闻资料", "其他"];
 
 type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes" | "outline" | "draft";
+type InterviewGenerationSource = "idle" | "ai" | "mock-missing-key" | "mock-api-error";
 
 const defaultInterviewForm: InterviewOutlineForm = {
   targetType: "基层干部",
@@ -79,6 +80,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   const [interviewForm, setInterviewForm] = useState<InterviewOutlineForm>(defaultInterviewForm);
   const [interviewDraft, setInterviewDraft] = useState("");
   const [interviewSavedAt, setInterviewSavedAt] = useState("");
+  const [interviewGenerationSource, setInterviewGenerationSource] = useState<InterviewGenerationSource>("idle");
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [materialForm, setMaterialForm] = useState<MaterialForm>(emptyMaterialForm);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null);
@@ -280,14 +282,31 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     }
   }
 
-  function generateInterviewOutline() {
+  async function generateInterviewOutline() {
     if (!project) return;
     setActionLoading("interview");
-    const outline = mockInterviewOutline(project, interviewForm);
-    const markdown = interviewOutlineToMarkdown(outline);
-    setInterviewDraft(markdown);
-    saveInterviewOutline(markdown, interviewForm);
-    setActionLoading("");
+    try {
+      const response = await fetch(`/api/projects/${params.id}/interview-outline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(interviewForm)
+      });
+      const data = (await response.json()) as { markdown?: string | null; source?: InterviewGenerationSource };
+      const source = data.source || (data.markdown ? "ai" : "mock-api-error");
+      const markdown = data.markdown || interviewOutlineToMarkdown(mockInterviewOutline(project, interviewForm));
+      setInterviewDraft(markdown);
+      setInterviewGenerationSource(source);
+      saveInterviewOutline(markdown, interviewForm);
+    } catch (error) {
+      console.error("Falling back to mock interview outline:", error);
+      const outline = mockInterviewOutline(project, interviewForm);
+      const markdown = interviewOutlineToMarkdown(outline);
+      setInterviewDraft(markdown);
+      setInterviewGenerationSource("mock-api-error");
+      saveInterviewOutline(markdown, interviewForm);
+    } finally {
+      setActionLoading("");
+    }
   }
 
   function saveInterviewOutline(markdown = interviewDraft, form = interviewForm) {
@@ -653,7 +672,17 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
           {activeModule === "topics" ? <TopicModule loading={actionLoading} onGenerate={generateTopics} onSelect={selectTopic} project={project} /> : null}
           {activeModule === "plan" ? <PlanModule loading={actionLoading} onGenerate={generatePlan} onSave={savePlan} planDraft={planDraft} project={project} setPlanDraft={setPlanDraft} /> : null}
           {activeModule === "interview" ? (
-            <InterviewModule form={interviewForm} loading={actionLoading} onFormChange={setInterviewForm} onGenerate={generateInterviewOutline} onSave={() => saveInterviewOutline()} outlineDraft={interviewDraft} savedAt={interviewSavedAt} setOutlineDraft={setInterviewDraft} />
+            <InterviewModule
+              form={interviewForm}
+              loading={actionLoading}
+              onFormChange={setInterviewForm}
+              onGenerate={generateInterviewOutline}
+              onSave={() => saveInterviewOutline()}
+              outlineDraft={interviewDraft}
+              savedAt={interviewSavedAt}
+              setOutlineDraft={setInterviewDraft}
+              source={interviewGenerationSource}
+            />
           ) : null}
           {activeModule === "materials" ? (
             <MaterialsModule
@@ -813,10 +842,19 @@ function PlanModule({ loading, onGenerate, onSave, planDraft, project, setPlanDr
   );
 }
 
-function InterviewModule({ form, loading, onFormChange, onGenerate, onSave, outlineDraft, savedAt, setOutlineDraft }: { form: InterviewOutlineForm; loading: string; onFormChange: (form: InterviewOutlineForm) => void; onGenerate: () => void; onSave: () => void; outlineDraft: string; savedAt: string; setOutlineDraft: (value: string) => void }) {
+function InterviewModule({ form, loading, onFormChange, onGenerate, onSave, outlineDraft, savedAt, setOutlineDraft, source }: { form: InterviewOutlineForm; loading: string; onFormChange: (form: InterviewOutlineForm) => void; onGenerate: () => void; onSave: () => void; outlineDraft: string; savedAt: string; setOutlineDraft: (value: string) => void; source: InterviewGenerationSource }) {
   function updateForm<K extends keyof InterviewOutlineForm>(key: K, value: InterviewOutlineForm[K]) {
     onFormChange({ ...form, [key]: value });
   }
+
+  const sourceText =
+    source === "ai"
+      ? "当前内容由真实 AI 生成"
+      : source === "mock-missing-key"
+        ? "未配置 API Key，当前使用 mock fallback"
+        : source === "mock-api-error"
+          ? "AI 调用失败，已使用 mock fallback"
+          : "";
 
   return (
     <Card>
@@ -832,6 +870,7 @@ function InterviewModule({ form, loading, onFormChange, onGenerate, onSave, outl
           <label className="flex items-center gap-2 text-sm font-medium"><input checked={form.hasSensitiveTopics} className="h-4 w-4" onChange={(event) => updateForm("hasSensitiveTopics", event.target.checked)} type="checkbox" />涉及敏感议题</label>
           <div className="grid gap-2 md:col-span-2"><Label>希望重点了解的问题</Label><Textarea onChange={(event) => updateForm("focusQuestions", event.target.value)} placeholder="例如：政策落地难点、群众真实感受、项目可持续性、资源协同机制等" value={form.focusQuestions} /></div>
         </div>
+        {sourceText ? <p className="w-fit rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground">{sourceText}</p> : null}
         <div className="grid gap-4 xl:grid-cols-2"><div><div className="mb-2 flex items-center justify-between"><p className="text-sm font-medium">提纲编辑</p>{savedAt ? <p className="text-xs text-muted-foreground">已保存：{new Date(savedAt).toLocaleString("zh-CN")}</p> : null}</div><Textarea className="min-h-[520px] font-mono" onChange={(event) => setOutlineDraft(event.target.value)} value={outlineDraft} /></div><div><p className="mb-2 text-sm font-medium">提纲预览</p><div className="markdown-preview min-h-[520px] rounded-md border bg-background p-4 text-sm">{outlineDraft ? <ReactMarkdown>{outlineDraft}</ReactMarkdown> : <p className="text-muted-foreground">生成后将在这里预览。</p>}</div></div></div>
       </CardContent>
     </Card>
@@ -1304,36 +1343,38 @@ function mockInterviewOutline(project: ProjectRecord, form: InterviewOutlineForm
   const target = form.targetType === "自定义对象" ? form.customTarget || "自定义对象" : form.targetType;
   const focus = form.focusQuestions || `围绕${project.theme}了解实际情况、主要困难和改进建议。`;
   return {
-    opening: `您好，我们是“${project.name}”社会实践团队，正在${project.location}围绕“${project.theme}”开展调研。本次访谈预计约 ${form.durationMinutes} 分钟，内容仅用于实践研究分析，我们会尊重您的真实表达并做好信息保护。`,
-    basicQuestions: [`请您简单介绍一下自己的工作/生活背景，以及与“${project.theme}”相关的经历。`, `您平时接触${project.theme}相关事务的频率高吗？主要通过哪些渠道了解？`, "在您看来，近几年当地相关工作或生活环境发生了哪些变化？"],
-    coreQuestions: [`围绕“${focus}”，您认为最值得关注的问题是什么？`, `从${target}的视角看，目前最明显的成效和不足分别是什么？`, "哪些主体在其中发挥了关键作用？他们之间的协同是否顺畅？", "如果要让相关工作更可持续，您认为最需要优先改进的是什么？"],
-    followUps: ["您刚才提到的这个现象，有没有具体案例可以展开说说？", "这个问题大概从什么时候开始变得明显？背后可能有哪些原因？", "不同群体对这件事的看法是否一致？分歧主要在哪里？", "如果资源有限，您觉得最先应该做哪一件事？为什么？"],
+    warmUpQuestions: [`我们是“${project.name}”社会实践团队，正在${project.location}围绕“${project.theme}”开展调研。本次访谈预计约 ${form.durationMinutes} 分钟。请问您方便先简单介绍一下自己的工作/生活背景吗？`, `您和“${project.theme}”相关事务通常有哪些接触？`, `从${target}的角度看，您最近一次接触相关事务大概是在什么场景下？`],
+    factualQuestions: [`目前您所在的社区/单位/村庄中，与“${project.theme}”相关的主要工作或服务有哪些？`, "这些工作通常由哪些人或机构参与？具体流程大概是怎样的？", "平时居民、群众或服务对象主要通过哪些渠道了解或参与？"],
+    processQuestions: [`围绕“${focus}”，能否请您讲讲一件相关工作从提出到落实大致会经历哪些步骤？`, "推进过程中，哪些环节比较顺畅？哪些环节需要反复沟通？", "如果遇到临时变化，通常由谁来协调，怎样调整？"],
+    caseFollowUps: ["能否举一个您印象比较深的具体例子？比如某一次服务、协调、沟通或处理过程。", "这个案例中，涉及哪些人？他们分别做了什么？", "这件事最后是如何解决或推进的？有没有留下后续问题？"],
+    difficultyFollowUps: ["在实际执行中，最常遇到的困难是什么？这些困难通常出现在哪个环节？", "资源、人手、信息沟通或群众理解方面，哪一项压力更明显？", "不同群体对同一件事是否有不同期待？通常如何协调？"],
     sensitiveAlternatives: form.hasSensitiveTopics ? ["将“是否存在矛盾/冲突”替换为“推进过程中有哪些需要协调的地方”。", "将“责任在谁”替换为“哪些环节还有进一步优化空间”。", "将“群众是否不满意”替换为“大家反馈比较集中的期待是什么”。"] : ["本次访谈未标记敏感议题。如现场出现敏感内容，可使用更中性的描述方式继续追问。"],
-    closing: "非常感谢您的分享。后续我们会对访谈内容进行整理归纳，如有需要补充或核对的信息，也希望能再次向您请教。",
+    closingConfirmations: ["刚才记录中，是否有哪一点需要我们补充或修正？", "还有哪些您认为重要、但我们没有问到的情况？", "后续如果需要核对信息，是否方便再向您请教？"],
     noteTips: ["记录原话中的关键词、具体案例、时间地点和涉及主体。", "区分事实描述、个人判断和改进建议，避免混在一起。", "敏感内容只记录研究必要信息，避免记录可识别个人隐私的细节。", "访谈结束后 30 分钟内补充现场观察和访谈员感受。"]
   };
 }
 
 function interviewOutlineToMarkdown(outline: InterviewOutline) {
-  return `# 访谈提纲
+  return `## 暖场问题
+${outline.warmUpQuestions.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
-## 开场白
-${outline.opening}
+## 事实性问题
+${outline.factualQuestions.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
-## 基础信息问题
-${outline.basicQuestions.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+## 过程性问题
+${outline.processQuestions.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
-## 核心问题
-${outline.coreQuestions.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+## 案例追问
+${outline.caseFollowUps.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
-## 深度追问
-${outline.followUps.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+## 矛盾/困难追问
+${outline.difficultyFollowUps.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
 ## 敏感问题替代表达
 ${outline.sensitiveAlternatives.map((item) => `- ${item}`).join("\n")}
 
-## 结束语
-${outline.closing}
+## 结束确认问题
+${outline.closingConfirmations.map((item, index) => `${index + 1}. ${item}`).join("\n")}
 
 ## 记录提示
 ${outline.noteTips.map((item) => `- ${item}`).join("\n")}`;

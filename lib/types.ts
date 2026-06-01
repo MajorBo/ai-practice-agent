@@ -44,12 +44,13 @@ export type InterviewOutlineForm = {
 };
 
 export type InterviewOutline = {
-  opening: string;
-  basicQuestions: string[];
-  coreQuestions: string[];
-  followUps: string[];
+  warmUpQuestions: string[];
+  factualQuestions: string[];
+  processQuestions: string[];
+  caseFollowUps: string[];
+  difficultyFollowUps: string[];
   sensitiveAlternatives: string[];
-  closing: string;
+  closingConfirmations: string[];
   noteTips: string[];
 };
 

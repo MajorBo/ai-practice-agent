@@ -33,6 +33,33 @@ copy .env.example .env
 
 `OPENAI_API_KEY` 可以留空。留空时系统会返回 mock 选题和 mock 调研方案。
 
+## 配置 AI API
+
+当前 AI 服务统一封装在 `lib/ai/aiService.ts`，提示词集中在 `lib/ai/prompts.ts`。
+
+默认支持 DeepSeek API，使用 OpenAI-compatible chat completions 调用方式：
+
+```bash
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+DeepSeek `baseURL` 为：
+
+```text
+https://api.deepseek.com
+```
+
+当前已接入真实 AI 的功能：
+
+- 选题生成
+- 访谈提纲生成
+
+如果没有配置 `DEEPSEEK_API_KEY`，或者 API 调用失败、JSON 解析失败，系统会自动 fallback 到 mock 数据，页面不会崩溃。
+
+不要把真实 API Key 写进代码，也不要提交 `.env` 或 `.env.local`。
+
 3. 生成 Prisma Client
 
 ```bash
@@ -92,3 +119,7 @@ HTML 单文件版使用浏览器 `localStorage` 保存数据，不需要 Node.js
 - 为 API route、资料库和 AI mock 增加自动化测试。
 - 接入更细致的 Markdown 编辑器体验。
 - 后续再实现访谈纪要、资料整理增强、报告初稿等功能。
+
+## Author
+
+本项目由马俊博主导设计与开发，使用 AI-assisted development 工具辅助实现。

@@ -1,100 +1,22 @@
-import OpenAI, { RateLimitError } from "openai";
+import { generateTopicCandidatesWithAI } from "@/lib/ai/aiService";
 import type { ProjectInput, ResearchPlanPayload, TopicCandidate } from "./types";
 
-const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
-function hasApiKey() {
-  return Boolean(process.env.OPENAI_API_KEY);
-}
-
-async function callOpenAIWithRetry<T>(prompt: string, maxRetries = 5): Promise<T> {
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-  for (let attempt = 0; attempt < maxRetries; attempt += 1) {
-    try {
-      const response = await client.chat.completions.create({
-        model,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content:
-              "你是高校社会实践调研方法专家。只返回合法 JSON，不要添加 Markdown 代码块。"
-          },
-          { role: "user", content: prompt }
-        ]
-      });
-
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error("OpenAI returned empty content.");
-      }
-      return JSON.parse(content) as T;
-    } catch (error) {
-      const isLastAttempt = attempt === maxRetries - 1;
-      if (error instanceof RateLimitError && !isLastAttempt) {
-        const waitMs = ((2 ** attempt) + 0.5) * 1000;
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw new Error("OpenAI retry exhausted.");
-}
-
 export async function generateTopicCandidates(project: ProjectInput): Promise<TopicCandidate[]> {
-  if (!hasApiKey()) {
-    return mockTopics(project);
-  }
-
   try {
-    const result = await callOpenAIWithRetry<{ topics: TopicCandidate[] }>(`
-请基于以下社会实践项目信息，生成 5 个候选调研选题。
-每个选题必须包含 title、researchQuestion、interviewTargets、methods、feasibilityScore、innovationScore、difficulty、reason。
-feasibilityScore 和 innovationScore 为 1-10 的整数，difficulty 只能是“低”“中”“高”。
-
-项目信息：
-${JSON.stringify(project, null, 2)}
-
-返回 JSON 格式：
-{"topics":[...]}
-`);
-    return result.topics;
+    const aiTopics = await generateTopicCandidatesWithAI(project);
+    if (aiTopics?.length) return aiTopics;
   } catch (error) {
     console.error("Falling back to mock topics:", error);
-    return mockTopics(project);
   }
+
+  return mockTopics(project);
 }
 
 export async function generateResearchPlan(payload: ResearchPlanPayload): Promise<string> {
-  if (!hasApiKey()) {
-    return mockPlan(payload);
-  }
-
-  try {
-    const result = await callOpenAIWithRetry<{ markdown: string }>(`
-请基于项目信息和主选题，生成一份适合高校社会实践队执行的调研方案。
-方案必须使用 Markdown，包含以下一级或二级标题：调研背景、调研目的、核心问题、调研对象、调研方法、日程安排、成员分工、预期成果、风险预案。
-
-项目信息：
-${JSON.stringify(payload.project, null, 2)}
-
-主选题：
-${JSON.stringify(payload.selectedTopic, null, 2)}
-
-返回 JSON 格式：
-{"markdown":"..."}
-`);
-    return result.markdown;
-  } catch (error) {
-    console.error("Falling back to mock plan:", error);
-    return mockPlan(payload);
-  }
+  return mockPlan(payload);
 }
 
-function mockTopics(project: ProjectInput): TopicCandidate[] {
+export function mockTopics(project: ProjectInput): TopicCandidate[] {
   const location = project.location || "实践地";
   const theme = project.theme || "实践主题";
 
@@ -107,7 +29,7 @@ function mockTopics(project: ProjectInput): TopicCandidate[] {
       feasibilityScore: 9,
       innovationScore: 7,
       difficulty: "中",
-      reason: "对象易触达，能形成定量与定性结合的材料，适合第一阶段实践队快速落地。"
+      reason: "对象易触达，能形成定量与定性结合的材料，适合实践队快速落地。"
     },
     {
       title: `${location}${theme}服务供给现状与改进路径研究`,
@@ -194,5 +116,5 @@ ${project.expectedOutcome}
 - 访谈对象临时无法参与：提前准备备选对象和线上访谈方案。
 - 数据样本不足：扩大问卷渠道，并补充现场观察与二手资料。
 - 时间安排紧张：每日复盘进度，优先保障核心对象访谈和关键材料收集。
-- 主题发散：围绕主选题持续校准问题边界，避免超出第一阶段目标。`;
+- 主题发散：围绕主选题持续校准问题边界，避免超出阶段目标。`;
 }
