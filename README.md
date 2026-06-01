@@ -1,48 +1,88 @@
-﻿# AI瀹炶返璋冪爺Agent MVP
+# AI实践调研Agent MVP
 
-闈㈠悜楂樻牎绀句細瀹炶返闃熺殑 AI 璋冪爺鍔╂墜銆傚綋鍓嶅彧瀹炵幇绗竴闃舵 MVP锛氬垱寤洪」鐩?鈫?鐢熸垚閫夐 鈫?纭涓婚€夐 鈫?鐢熸垚璋冪爺鏂规 鈫?淇濆瓨鏂规銆?
-## 鎶€鏈爤
+面向高校社会实践队的 AI 调研助手。当前已实现调研前准备与资料整理的基础 MVP：创建项目、生成选题、确认主选题、生成调研方案、生成访谈提纲、管理文本资料与生成 mock 摘要。
+
+## 技术栈
 
 - Next.js App Router
 - TypeScript
 - Tailwind CSS
-- shadcn/ui 椋庢牸缁勪欢
+- shadcn/ui 风格组件
 - Prisma
-- PostgreSQL
-- OpenAI API
-- Markdown 缂栬緫涓庡睍绀?
-## 鏈湴杩愯
+- PostgreSQL（可选）
+- OpenAI API（可选）
+- Markdown 编辑与展示
 
-1. 瀹夎渚濊禆
+## 本地运行
 
-```bash
-npm install
-```
-
-2. 閰嶇疆鐜鍙橀噺
+1. 安装依赖
 
 ```bash
-cp .env.example .env
+pnpm install
 ```
 
-淇敼 `.env` 涓殑 `DATABASE_URL`锛屾寚鍚戞湰鍦?PostgreSQL 鏁版嵁搴撱€?
-`OPENAI_API_KEY` 鍙互鐣欑┖銆傜暀绌烘椂绯荤粺浼氳繑鍥?mock 閫夐鍜?mock 璋冪爺鏂规锛屾柟渚挎湰鍦版紨绀恒€?
-3. 鍒濆鍖栨暟鎹簱
+2. 配置环境变量（可选）
 
 ```bash
-npm run prisma:generate
-npm run prisma:migrate -- --name init
+copy .env.example .env
 ```
 
-4. 鍚姩寮€鍙戞湇鍔?
+如果配置 `.env` 中的 `DATABASE_URL`，项目会使用 PostgreSQL 和 Prisma 保存项目数据。
+
+如果不配置 `DATABASE_URL`，系统会自动使用本地 JSON 文件 `work/projects-store.json` 保存项目数据，方便本地演示。
+
+`OPENAI_API_KEY` 可以留空。留空时系统会返回 mock 选题和 mock 调研方案。
+
+3. 生成 Prisma Client
+
 ```bash
-npm run dev
+pnpm prisma generate
 ```
 
-鎵撳紑 http://localhost:3000
+4. 如果使用 PostgreSQL，初始化数据库
 
-## 绗竴闃舵宸插疄鐜板姛鑳?
-- `/` 浜у搧棣栭〉锛屾彁渚涜繘鍏ラ」鐩拰鏂板缓椤圭洰鍏ュ彛銆?- `/projects` 椤圭洰鍒楄〃锛屽睍绀洪」鐩悕绉般€佸疄璺电被鍨嬨€佸疄璺靛湴鐐广€佸綋鍓嶉樁娈点€佹洿鏂版椂闂村拰杩涘叆鎸夐挳銆?- `/projects/new` 鏂板缓椤圭洰琛ㄥ崟锛岃鐩?Build Brief 瑕佹眰鐨勯」鐩瓧娈点€?- `/projects/[id]` 椤圭洰宸ヤ綔鍙帮紝鍖呭惈宸︿晶娴佺▼瀵艰埅銆佷腑闂存ā鍧楀唴瀹广€佸彸渚?AI 鍔╂墜鍗犱綅銆?- 閫夐璁捐妯″潡锛氱敓鎴?5 涓€欓€夐€夐锛屽睍绀虹爺绌堕棶棰樸€佽璋堝璞°€佹柟娉曘€佸彲琛屾€с€佸垱鏂版€с€侀毦搴﹀拰鎺ㄨ崘鐞嗙敱銆?- 涓婚€夐纭锛氬彲閫夋嫨涓€涓€欓€夐€夐浣滀负涓婚€夐锛屽苟鎺ㄨ繘鍒拌皟鐮旀柟妗堥樁娈点€?- 璋冪爺鏂规妯″潡锛氬熀浜庨」鐩俊鎭拰涓婚€夐鐢熸垚 Markdown 璋冪爺鏂规骞朵繚瀛樺埌椤圭洰锛屾敮鎸佺紪杈戝悗鍐嶆淇濆瓨銆?- 璁胯皥鎻愮翰妯″潡锛氬彲閫夋嫨璁胯皥瀵硅薄绫诲瀷銆佸～鍐欒璋堟椂闀裤€佹晱鎰熻棰樺拰閲嶇偣闂锛岀敓鎴?mock 缁撴瀯鍖栬璋堟彁绾诧紝骞舵敮鎸佺紪杈戜繚瀛樸€傛寮?Next 椤甸潰鏆傚瓨鍒版祻瑙堝櫒鏈湴瀛樺偍锛屽綋鍓嶉瑙堟湇鍔′繚瀛樺埌 `work/preview-db.json`銆?- `lib/aiService.ts`锛氱粺涓€灏佽 OpenAI 璋冪敤锛屽寘鍚?RateLimit 閲嶈瘯锛涙病鏈?`OPENAI_API_KEY` 鎴?AI 璋冪敤澶辫触鏃惰繑鍥?mock 鏁版嵁銆?
+```bash
+pnpm prisma migrate dev --name init
+```
+
+5. 启动开发服务
+
+```bash
+pnpm dev
+```
+
+打开 http://localhost:3000
+
+## 已实现功能
+
+- `/` 产品首页，提供进入项目和新建项目入口。
+- `/projects` 项目列表，展示项目名称、实践类型、实践地点、当前阶段、更新时间和进入按钮。
+- `/projects/new` 新建项目表单，覆盖 Build Brief 要求的项目字段。
+- `/projects/[id]` 项目工作台，包含左侧流程导航、中间模块内容、右侧 AI 助手占位。
+- 选题设计模块：生成 5 个候选选题，展示研究问题、访谈对象、方法、可行性、创新性、难度和推荐理由。
+- 主选题确认：可选择一个候选选题作为主选题，并推进到调研方案阶段。
+- 调研方案模块：基于项目信息和主选题生成 Markdown 调研方案并保存到项目，支持编辑后再次保存。
+- 访谈提纲模块：可选择访谈对象类型、填写访谈时长、敏感议题和重点问题，生成 mock 结构化访谈提纲，并支持编辑保存。
+- 资料库模块：支持新增文本资料、列表展示、详情查看、编辑删除和 mock 摘要生成，资料保存到浏览器本地存储。
+- `lib/aiService.ts`：统一封装 OpenAI 调用，包含 RateLimit 重试；没有 `OPENAI_API_KEY` 或 AI 调用失败时返回 mock 数据。
+- `lib/projectStore.ts`：项目数据存储适配层；有 `DATABASE_URL` 时使用 Prisma/PostgreSQL，没有时使用本地 JSON 文件。
+
+## HTML 单文件版
+
+仓库中包含 `index.html` 和 `ai-practice-agent-standalone.html`，可用于 GitHub Pages 或直接双击体验。
+
+HTML 单文件版使用浏览器 `localStorage` 保存数据，不需要 Node.js、pnpm、数据库或 OpenAI API。
+
+## 数据保存策略
+
+- 项目信息、候选选题、主选题、调研方案：优先使用 Prisma/PostgreSQL；没有 `DATABASE_URL` 时使用 `work/projects-store.json`。
+- 访谈提纲：保存到浏览器 `localStorage`。
+- 资料库文本资料：保存到浏览器 `localStorage`。
+- mock AI 结果：不调用真实 AI API。
+
 ## TODO
 
-- 澧炲姞鏇村畬鏁寸殑瀛楁鏍￠獙鍜岄敊璇彁绀恒€?- 涓?API route 鍜?AI mock 澧炲姞鑷姩鍖栨祴璇曘€?- 鎺ュ叆鏇寸粏鑷寸殑 Markdown 缂栬緫鍣ㄤ綋楠屻€?- 绗簩闃舵鍐嶅疄鐜拌璋堢邯瑕併€佽祫鏂欐暣鐞嗐€佹姤鍛婂垵绋跨瓑闈炴湰闃舵鍔熻兘銆?
+- 增加更完整的字段校验和错误提示。
+- 为 API route、资料库和 AI mock 增加自动化测试。
+- 接入更细致的 Markdown 编辑器体验。
+- 后续再实现访谈纪要、资料整理增强、报告初稿等功能。
