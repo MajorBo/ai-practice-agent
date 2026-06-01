@@ -1,25 +1,20 @@
 import { NextResponse } from "next/server";
 import { generateResearchPlanWithAI, getAIProviderStatus } from "@/lib/ai/aiService";
 import { mockPlan } from "@/lib/aiService";
-import { getProject, updateProject } from "@/lib/projectStore";
-import type { ProjectInput, ResearchPlanPayload, TopicCandidate } from "@/lib/types";
+import type { ProjectInput, ProjectRecord, ResearchPlanPayload, TopicCandidate } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type GenerationSource = "ai" | "mock-missing-key" | "mock-api-error";
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request) {
   try {
-    const project = await getProject(params.id);
+    const body = (await request.json()) as { project?: ProjectRecord };
+    const project = body.project;
 
-    if (!project) {
-      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
-    }
-
-    if (!project.selectedTopic) {
-      return NextResponse.json({ error: "请先确认主选题" }, { status: 400 });
-    }
+    if (!project) return NextResponse.json({ error: "请在请求中提供项目上下文" }, { status: 400 });
+    if (!project.selectedTopic) return NextResponse.json({ error: "请先确认主选题" }, { status: 400 });
 
     const projectInput: ProjectInput & { id: string } = {
       id: project.id,
@@ -62,38 +57,25 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       }
     }
 
-    const updated = await updateProject(params.id, {
+    return NextResponse.json({
+      ...project,
       researchPlan,
-      stage: "方案已保存"
+      stage: "方案已保存",
+      updatedAt: new Date().toISOString(),
+      generationSource
     });
-
-    return NextResponse.json({ ...updated, generationSource });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "方案生成失败" }, { status: 500 });
   }
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  try {
-    const body = (await request.json()) as { markdown?: string };
-
-    if (typeof body.markdown !== "string" || body.markdown.trim().length === 0) {
-      return NextResponse.json({ error: "方案内容不能为空" }, { status: 400 });
-    }
-
-    const updated = await updateProject(params.id, {
-      researchPlan: body.markdown,
-      stage: "方案已保存"
-    });
-
-    if (!updated) {
-      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
-    }
-
-    return NextResponse.json(updated);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "方案保存失败" }, { status: 500 });
-  }
+export async function PATCH() {
+  return NextResponse.json(
+    {
+      error: "SERVER_STORAGE_DISABLED",
+      message: "当前 MVP 使用浏览器本地存储，方案保存请在前端 localStorage 完成。"
+    },
+    { status: 501 }
+  );
 }

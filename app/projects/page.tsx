@@ -5,36 +5,17 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Plus } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { listLocalProjects } from "@/lib/clientProjectStore";
+import type { ProjectRecord } from "@/lib/types";
 import { formatDateTime } from "@/lib/utils";
 
-type ProjectListItem = {
-  id: string;
-  name: string;
-  practiceType: string;
-  location: string;
-  stage: string;
-  updatedAt: string;
-};
-
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    async function loadProjects() {
-      try {
-        const response = await fetch("/api/projects");
-        if (!response.ok) throw new Error("项目列表加载失败");
-        setProjects(await response.json());
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "项目列表加载失败");
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadProjects();
+    setProjects(listLocalProjects());
+    setLoading(false);
   }, []);
 
   return (
@@ -43,6 +24,7 @@ export default function ProjectsPage() {
         <div>
           <p className="text-sm text-muted-foreground">项目列表</p>
           <h1 className="mt-1 text-3xl font-bold">社会实践调研项目</h1>
+          <p className="mt-2 text-sm text-muted-foreground">当前内测版项目保存在本浏览器 localStorage。</p>
         </div>
         <Link className={buttonVariants({ className: "gap-2" })} href="/projects/new">
           <Plus className="h-4 w-4" /> 新建项目
@@ -50,7 +32,6 @@ export default function ProjectsPage() {
       </div>
 
       {loading ? <p className="text-muted-foreground">正在加载项目...</p> : null}
-      {error ? <p className="text-destructive">{error}</p> : null}
 
       {!loading && projects.length === 0 ? (
         <Card>

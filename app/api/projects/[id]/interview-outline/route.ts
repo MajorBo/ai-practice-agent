@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
 import { generateInterviewOutlineWithAI, getAIProviderStatus } from "@/lib/ai/aiService";
-import { getProject } from "@/lib/projectStore";
-import type { InterviewOutlineForm } from "@/lib/types";
+import type { InterviewOutlineForm, ProjectRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request) {
   try {
-    const project = await getProject(params.id);
-    if (!project) {
-      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
+    const body = (await request.json()) as { form?: InterviewOutlineForm; project?: ProjectRecord };
+    const project = body.project;
+    const form = body.form;
+
+    if (!project || !form) {
+      return NextResponse.json({ error: "请在请求中提供项目和访谈设置" }, { status: 400 });
     }
 
-    const form = (await request.json()) as InterviewOutlineForm;
     const status = getAIProviderStatus();
     const hasConfiguredKey = status.provider === "openai" ? status.hasOpenAIKey : status.hasDeepSeekKey;
 

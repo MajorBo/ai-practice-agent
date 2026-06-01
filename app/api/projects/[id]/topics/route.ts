@@ -1,17 +1,17 @@
 import { NextResponse } from "next/server";
 import { generateTopicCandidates } from "@/lib/aiService";
-import { getProject, updateProject } from "@/lib/projectStore";
-import type { ProjectInput } from "@/lib/types";
+import type { ProjectInput, ProjectRecord } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request) {
   try {
-    const project = await getProject(params.id);
+    const body = (await request.json()) as { project?: ProjectRecord };
+    const project = body.project;
 
     if (!project) {
-      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
+      return NextResponse.json({ error: "请在请求中提供项目上下文" }, { status: 400 });
     }
 
     const projectInput: ProjectInput = {
@@ -27,14 +27,15 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
     };
 
     const topics = await generateTopicCandidates(projectInput);
-    const updated = await updateProject(params.id, {
+
+    return NextResponse.json({
+      ...project,
       topics,
       selectedTopic: null,
       researchPlan: null,
-      stage: "选题设计"
+      stage: "选题设计",
+      updatedAt: new Date().toISOString()
     });
-
-    return NextResponse.json(updated);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "选题生成失败" }, { status: 500 });

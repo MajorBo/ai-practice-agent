@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createLocalProject } from "@/lib/clientProjectStore";
 import type { ProjectInput } from "@/lib/types";
 
 const initialForm: ProjectInput = {
@@ -33,24 +34,26 @@ export default function NewProjectPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  async function submitProject(event: FormEvent<HTMLFormElement>) {
+  function validateProject(input: ProjectInput) {
+    if (!input.name || !input.practiceType || !input.theme || !input.location || !input.startDate || !input.endDate || !input.expectedOutcome) {
+      return "请完整填写项目基础信息";
+    }
+    if (!Number.isFinite(input.teamSize) || input.teamSize <= 0) return "团队人数必须大于 0";
+    if (new Date(input.startDate) > new Date(input.endDate)) return "实践开始时间不能晚于结束时间";
+    return "";
+  }
+
+  function submitProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
 
     try {
-      const response = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
-      });
-      const data = await response.json();
+      const validationError = validateProject(form);
+      if (validationError) throw new Error(validationError);
 
-      if (!response.ok) {
-        throw new Error(data.error || "项目创建失败");
-      }
-
-      router.push(`/projects/${data.id}`);
+      const project = createLocalProject(form);
+      router.push(`/projects/${project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "项目创建失败");
     } finally {
@@ -65,7 +68,7 @@ export default function NewProjectPage() {
           返回项目列表
         </Link>
         <h1 className="mt-3 text-3xl font-bold">新建实践调研项目</h1>
-        <p className="mt-2 text-muted-foreground">填写基础信息后，进入工作台生成候选选题。</p>
+        <p className="mt-2 text-muted-foreground">项目会保存到当前浏览器 localStorage，适合 Vercel 内测演示。</p>
       </div>
 
       <Card>

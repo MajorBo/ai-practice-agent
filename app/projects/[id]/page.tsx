@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { getLocalProject, updateLocalProject } from "@/lib/clientProjectStore";
 import type {
   InterviewOutline,
   InterviewOutlineForm,
@@ -107,12 +108,8 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
 
   async function loadProject() {
     setError("");
-    const response = await fetch(`/api/projects/${params.id}`);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "项目加载失败");
-    }
+    const data = getLocalProject(params.id);
+    if (!data) throw new Error("未找到项目。当前内测版项目只保存在创建它的浏览器中。");
 
     setProject(data);
     setPlanDraft(data.researchPlan || "");
@@ -239,6 +236,12 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
 
       setProject(data);
       setPlanDraft(data.researchPlan || "");
+      updateLocalProject(params.id, {
+        topics: data.topics,
+        selectedTopic: data.selectedTopic,
+        researchPlan: data.researchPlan,
+        stage: data.stage
+      });
       if (data.selectedTopic) setActiveModule("plan");
     } catch (err) {
       setError(err instanceof Error ? err.message : "操作失败");
@@ -248,11 +251,20 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   }
 
   function generateTopics() {
-    runAction(`/api/projects/${params.id}/topics`, "topics");
+    if (!project) return;
+    runAction(`/api/projects/${params.id}/topics`, "topics", { project });
   }
 
   function selectTopic(topic: TopicCandidate) {
-    runAction(`/api/projects/${params.id}/select-topic`, "select-topic", { topic });
+    if (!project) return;
+    const updated = updateLocalProject(params.id, {
+      selectedTopic: topic,
+      stage: "调研方案"
+    });
+    if (updated) {
+      setProject(updated);
+      setActiveModule("plan");
+    }
   }
 
   async function generatePlan() {
@@ -261,7 +273,9 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
 
     try {
       const response = await fetch(`/api/projects/${params.id}/plan`, {
-        method: "POST"
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project })
       });
       const data = (await response.json()) as ProjectRecord & { generationSource?: PlanGenerationSource; error?: string };
 
@@ -272,6 +286,10 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
       setProject(data);
       setPlanDraft(data.researchPlan || "");
       setPlanGenerationSource(data.generationSource || "mock-api-error");
+      updateLocalProject(params.id, {
+        researchPlan: data.researchPlan,
+        stage: data.stage
+      });
       if (data.selectedTopic) setActiveModule("plan");
     } catch (err) {
       setError(err instanceof Error ? err.message : "方案生成失败");
@@ -286,19 +304,13 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     setError("");
 
     try {
-      const response = await fetch(`/api/projects/${params.id}/plan`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markdown: planDraft })
+      const updated = updateLocalProject(params.id, {
+        researchPlan: planDraft,
+        stage: "方案已保存"
       });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "方案保存失败");
-      }
-
-      setProject(data);
-      setPlanDraft(data.researchPlan || "");
+      if (!updated) throw new Error("项目不存在");
+      setProject(updated);
+      setPlanDraft(updated.researchPlan || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "方案保存失败");
     } finally {
@@ -313,7 +325,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
       const response = await fetch(`/api/projects/${params.id}/interview-outline`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(interviewForm)
+        body: JSON.stringify({ form: interviewForm, project })
       });
       const data = (await response.json()) as { markdown?: string | null; source?: InterviewGenerationSource };
       const source = data.source || (data.markdown ? "ai" : "mock-api-error");

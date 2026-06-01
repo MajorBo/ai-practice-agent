@@ -1,20 +1,14 @@
 import { NextResponse } from "next/server";
-import { getProject } from "@/lib/projectStore";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
-  try {
-    const project = await getProject(params.id);
-
-    if (!project) {
-      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
-    }
-
-    return NextResponse.json(project);
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "项目加载失败" }, { status: 500 });
-  }
+export async function GET() {
+  return NextResponse.json(
+    {
+      error: "SERVER_STORAGE_DISABLED",
+      message: "当前 MVP 使用浏览器本地存储，项目详情请从 localStorage 读取。"
+    },
+    { status: 501 }
+  );
 }

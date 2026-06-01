@@ -27,9 +27,9 @@ pnpm install
 copy .env.example .env
 ```
 
-如果配置 `.env` 中的 `DATABASE_URL`，项目会使用 PostgreSQL 和 Prisma 保存项目数据。
+当前 Vercel 内测版使用浏览器 `localStorage` 保存项目数据，不再在服务端写入 `work/projects-store.json`。
 
-如果不配置 `DATABASE_URL`，系统会自动使用本地 JSON 文件 `work/projects-store.json` 保存项目数据，方便本地演示。
+项目数据只保存在当前浏览器中。换设备、清除浏览器缓存、使用隐身模式或更换浏览器后，原数据可能不可见。
 
 `OPENAI_API_KEY` 可以留空。留空时系统会返回 mock 选题和 mock 调研方案。
 
@@ -95,7 +95,7 @@ pnpm dev
 - 报告大纲模块：基于项目基础信息、主选题、调研方案、资料摘要和访谈纪要生成 mock 结构化报告大纲，支持编辑、保存、重新生成和删除。
 - 报告初稿模块：基于已保存报告大纲、项目资料和访谈纪要生成 mock 结构化报告初稿，支持编辑保存、重新生成、删除、mock 润色和 mock 材料支撑检查。
 - `lib/aiService.ts`：统一封装 OpenAI 调用，包含 RateLimit 重试；没有 `OPENAI_API_KEY` 或 AI 调用失败时返回 mock 数据。
-- `lib/projectStore.ts`：项目数据存储适配层；有 `DATABASE_URL` 时使用 Prisma/PostgreSQL，没有时使用本地 JSON 文件。
+- 项目创建、项目列表、项目详情：当前内测版保存到浏览器 `localStorage`，避免 Vercel Serverless 只读文件系统写入失败。
 
 ## HTML 单文件版
 
@@ -105,7 +105,7 @@ HTML 单文件版使用浏览器 `localStorage` 保存数据，不需要 Node.js
 
 ## 数据保存策略
 
-- 项目信息、候选选题、主选题、调研方案：优先使用 Prisma/PostgreSQL；没有 `DATABASE_URL` 时使用 `work/projects-store.json`。
+- 项目信息、候选选题、主选题、调研方案：当前内测版保存到浏览器 `localStorage`。
 - 访谈提纲：保存到浏览器 `localStorage`。
 - 资料库文本资料：保存到浏览器 `localStorage`。
 - 访谈纪要：保存到浏览器 `localStorage`。
@@ -143,3 +143,10 @@ DEEPSEEK_API_KEY=你的 DeepSeek API Key
 不要把真实 API Key 写入代码、README、`.env` 或 `.env.local`。`DEEPSEEK_API_KEY` 只应作为服务端环境变量配置；不要使用 `NEXT_PUBLIC_` 前缀。
 
 如果没有配置 `DEEPSEEK_API_KEY`，系统会自动使用 mock fallback，页面不会崩溃。
+
+当前线上内测版的数据保存说明：
+
+- 项目数据保存在浏览器 `localStorage`。
+- 数据只存在于当前浏览器和当前设备。
+- 换设备、清缓存、隐身模式可能导致数据不可见。
+- 后续正式版计划接入 Supabase/PostgreSQL，实现云端持久化和多设备访问。
