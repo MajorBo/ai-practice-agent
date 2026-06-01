@@ -21,6 +21,10 @@ import type {
   MaterialSummary,
   MaterialType,
   ProjectRecord,
+  ReportDraft,
+  ReportDraftOptions,
+  ReportDraftStyle,
+  ReportDraftLengthOption,
   ReportOutline,
   TopicCandidate
 } from "@/lib/types";
@@ -28,7 +32,7 @@ import type {
 const targetTypes: InterviewTargetType[] = ["基层干部", "村干部/社区干部", "驻村干部", "普通群众", "政府工作人员", "专家学者", "自定义对象"];
 const materialTypes: MaterialType[] = ["访谈文本", "政策文件", "实践日志", "新闻资料", "其他"];
 
-type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes" | "outline";
+type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes" | "outline" | "draft";
 
 const defaultInterviewForm: InterviewOutlineForm = {
   targetType: "基层干部",
@@ -56,6 +60,15 @@ const emptyInterviewNoteForm: InterviewNoteForm = {
   isAnonymous: false
 };
 
+const defaultReportDraftOptions: ReportDraftOptions = {
+  lengthOption: "3000字",
+  customLength: "",
+  style: "高校社会实践报告"
+};
+
+const reportDraftLengthOptions: ReportDraftLengthOption[] = ["3000字", "5000字", "8000字", "自定义"];
+const reportDraftStyles: ReportDraftStyle[] = ["高校社会实践报告", "政策调研报告", "课程论文式", "评优答辩式"];
+
 export default function ProjectWorkspacePage({ params }: { params: { id: string } }) {
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [activeModule, setActiveModule] = useState<ModuleKey>("topics");
@@ -77,11 +90,16 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   const [selectedInterviewNoteId, setSelectedInterviewNoteId] = useState<string | null>(null);
   const [reportOutline, setReportOutline] = useState<ReportOutline | null>(null);
   const [reportOutlineDraft, setReportOutlineDraft] = useState("");
+  const [reportDraft, setReportDraft] = useState<ReportDraft | null>(null);
+  const [reportDraftText, setReportDraftText] = useState("");
+  const [reportDraftOptions, setReportDraftOptions] = useState<ReportDraftOptions>(defaultReportDraftOptions);
+  const [reportDraftFeedback, setReportDraftFeedback] = useState("");
 
   const interviewStorageKey = `interview-outline:${params.id}`;
   const materialsStorageKey = `materials-library:${params.id}`;
   const interviewNotesStorageKey = `interview-notes:${params.id}`;
   const reportOutlineStorageKey = `report-outline:${params.id}`;
+  const reportDraftStorageKey = `report-draft:${params.id}`;
 
   async function loadProject() {
     setError("");
@@ -155,6 +173,21 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
       window.localStorage.removeItem(reportOutlineStorageKey);
     }
   }, [reportOutlineStorageKey]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(reportDraftStorageKey);
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved) as ReportDraft;
+      setReportDraft(parsed);
+      setReportDraftText(parsed.markdown || "");
+      setReportDraftOptions(parsed.options || defaultReportDraftOptions);
+      setReportDraftFeedback(parsed.polishFeedback || parsed.supportCheck || "");
+    } catch {
+      window.localStorage.removeItem(reportDraftStorageKey);
+    }
+  }, [reportDraftStorageKey]);
 
   const projectInput = useMemo(() => {
     if (!project) return [];
@@ -473,6 +506,75 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     window.localStorage.removeItem(reportOutlineStorageKey);
   }
 
+  function persistReportDraft(markdown = reportDraftText, options = reportDraftOptions, feedback = reportDraftFeedback) {
+    if (!markdown.trim()) {
+      setError("请先生成或填写报告初稿");
+      return;
+    }
+    const nextDraft: ReportDraft = {
+      markdown,
+      options,
+      polishFeedback: feedback.startsWith("## AI润色反馈") ? feedback : reportDraft?.polishFeedback || "",
+      supportCheck: feedback.startsWith("## 材料支撑检查") ? feedback : reportDraft?.supportCheck || "",
+      savedAt: new Date().toISOString()
+    };
+    setReportDraft(nextDraft);
+    setReportDraftText(markdown);
+    window.localStorage.setItem(reportDraftStorageKey, JSON.stringify(nextDraft));
+    setError("");
+  }
+
+  function generateReportDraft() {
+    if (!project) return;
+    if (!reportOutlineDraft.trim()) {
+      setError("请先生成报告大纲，再生成报告初稿");
+      setActiveModule("draft");
+      return;
+    }
+    const markdown = mockReportDraft(project, materials, interviewNotes, reportOutlineDraft, reportDraftOptions);
+    setReportDraftFeedback("");
+    persistReportDraft(markdown, reportDraftOptions, "");
+  }
+
+  function deleteReportDraft() {
+    setReportDraft(null);
+    setReportDraftText("");
+    setReportDraftFeedback("");
+    window.localStorage.removeItem(reportDraftStorageKey);
+  }
+
+  function polishReportDraft() {
+    const feedback = mockReportPolishFeedback(reportDraftText, reportDraftOptions);
+    setReportDraftFeedback(feedback);
+    if (reportDraftText.trim()) {
+      const nextDraft: ReportDraft = {
+        markdown: reportDraftText,
+        options: reportDraftOptions,
+        polishFeedback: feedback,
+        supportCheck: reportDraft?.supportCheck || "",
+        savedAt: new Date().toISOString()
+      };
+      setReportDraft(nextDraft);
+      window.localStorage.setItem(reportDraftStorageKey, JSON.stringify(nextDraft));
+    }
+  }
+
+  function checkReportSupport() {
+    const feedback = mockReportSupportCheck(project, materials, interviewNotes, reportOutlineDraft);
+    setReportDraftFeedback(feedback);
+    if (reportDraftText.trim()) {
+      const nextDraft: ReportDraft = {
+        markdown: reportDraftText,
+        options: reportDraftOptions,
+        polishFeedback: reportDraft?.polishFeedback || "",
+        supportCheck: feedback,
+        savedAt: new Date().toISOString()
+      };
+      setReportDraft(nextDraft);
+      window.localStorage.setItem(reportDraftStorageKey, JSON.stringify(nextDraft));
+    }
+  }
+
   if (loading) {
     return <main className="p-8 text-muted-foreground">正在加载工作台...</main>;
   }
@@ -524,6 +626,9 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               </NavButton>
               <NavButton active={activeModule === "outline"} onClick={() => setActiveModule("outline")}>
                 <ScrollText className="h-4 w-4" /> 报告大纲
+              </NavButton>
+              <NavButton active={activeModule === "draft"} onClick={() => setActiveModule("draft")}>
+                <FileText className="h-4 w-4" /> 报告初稿
               </NavButton>
             </CardContent>
           </Card>
@@ -603,6 +708,26 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               setOutlineDraft={setReportOutlineDraft}
             />
           ) : null}
+          {activeModule === "draft" ? (
+            <ReportDraftModule
+              draftText={reportDraftText}
+              feedback={reportDraftFeedback}
+              hasOutline={Boolean(reportOutlineDraft)}
+              hasPlan={Boolean(project.researchPlan)}
+              hasTopic={Boolean(project.selectedTopic)}
+              interviewNoteCount={interviewNotes.length}
+              materialCount={materials.length}
+              onCheckSupport={checkReportSupport}
+              onDelete={deleteReportDraft}
+              onGenerate={generateReportDraft}
+              onPolish={polishReportDraft}
+              onSave={() => persistReportDraft()}
+              options={reportDraftOptions}
+              savedAt={reportDraft?.savedAt || ""}
+              setDraftText={setReportDraftText}
+              setOptions={setReportDraftOptions}
+            />
+          ) : null}
         </section>
 
         <aside>
@@ -613,7 +738,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
-              <p>当前支持：生成候选选题、调研方案、访谈提纲、资料 mock 摘要、访谈纪要和报告大纲。</p>
+              <p>当前支持：生成候选选题、调研方案、访谈提纲、资料 mock 摘要、访谈纪要、报告大纲和报告初稿。</p>
               <p>资料库暂时只管理文本资料，保存在浏览器本地存储。</p>
               <p>未配置 OPENAI_API_KEY 时，选题和方案会自动使用 mock 数据。</p>
             </CardContent>
@@ -1041,6 +1166,140 @@ function StatusItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ReportDraftModule({
+  draftText,
+  feedback,
+  hasOutline,
+  hasPlan,
+  hasTopic,
+  interviewNoteCount,
+  materialCount,
+  onCheckSupport,
+  onDelete,
+  onGenerate,
+  onPolish,
+  onSave,
+  options,
+  savedAt,
+  setDraftText,
+  setOptions
+}: {
+  draftText: string;
+  feedback: string;
+  hasOutline: boolean;
+  hasPlan: boolean;
+  hasTopic: boolean;
+  interviewNoteCount: number;
+  materialCount: number;
+  onCheckSupport: () => void;
+  onDelete: () => void;
+  onGenerate: () => void;
+  onPolish: () => void;
+  onSave: () => void;
+  options: ReportDraftOptions;
+  savedAt: string;
+  setDraftText: (value: string) => void;
+  setOptions: (value: ReportDraftOptions) => void;
+}) {
+  function updateOptions<K extends keyof ReportDraftOptions>(key: K, value: ReportDraftOptions[K]) {
+    setOptions({ ...options, [key]: value });
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <CardTitle>报告初稿</CardTitle>
+          <p className="mt-2 text-sm text-muted-foreground">基于已保存报告大纲、项目资料和访谈纪要生成结构化 mock 报告初稿。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={!hasOutline} onClick={onGenerate}>{draftText ? "重新生成初稿" : "生成报告初稿"}</Button>
+          <Button disabled={!draftText} onClick={onSave} variant="outline">保存初稿</Button>
+          <Button disabled={!draftText} onClick={onDelete} variant="outline">删除初稿</Button>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <div className="grid gap-3 rounded-lg border bg-background p-4 text-sm md:grid-cols-5">
+          <StatusItem label="主选题" value={hasTopic ? "已有" : "暂无"} />
+          <StatusItem label="调研方案" value={hasPlan ? "已有" : "暂无"} />
+          <StatusItem label="资料数量" value={`${materialCount} 份`} />
+          <StatusItem label="访谈纪要数量" value={`${interviewNoteCount} 份`} />
+          <StatusItem label="报告大纲" value={hasOutline ? "已有" : "暂无"} />
+        </div>
+
+        {!hasOutline ? (
+          <div className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+            还没有已保存的报告大纲。请先进入“报告大纲”模块生成并保存大纲，再生成报告初稿。
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 rounded-lg border bg-background p-4 md:grid-cols-3">
+          <div className="grid gap-2">
+            <Label>字数要求</Label>
+            <select
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateOptions("lengthOption", event.target.value as ReportDraftLengthOption)}
+              value={options.lengthOption}
+            >
+              {reportDraftLengthOptions.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          {options.lengthOption === "自定义" ? (
+            <div className="grid gap-2">
+              <Label>自定义字数</Label>
+              <input
+                className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                onChange={(event) => updateOptions("customLength", event.target.value)}
+                placeholder="如：6000字"
+                value={options.customLength}
+              />
+            </div>
+          ) : null}
+          <div className="grid gap-2">
+            <Label>写作风格</Label>
+            <select
+              className="h-10 rounded-md border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+              onChange={(event) => updateOptions("style", event.target.value as ReportDraftStyle)}
+              value={options.style}
+            >
+              {reportDraftStyles.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end gap-2">
+            <Button disabled={!draftText} onClick={onPolish} variant="outline">AI润色</Button>
+            <Button disabled={!draftText} onClick={onCheckSupport} variant="outline">检查材料支撑</Button>
+          </div>
+        </div>
+
+        {savedAt ? <p className="text-xs text-muted-foreground">已保存：{new Date(savedAt).toLocaleString("zh-CN")}</p> : null}
+
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div>
+            <p className="mb-2 text-sm font-medium">初稿编辑</p>
+            <Textarea className="min-h-[640px] font-mono" onChange={(event) => setDraftText(event.target.value)} value={draftText} />
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">初稿预览</p>
+            <div className="markdown-preview min-h-[640px] rounded-md border bg-background p-4 text-sm">
+              {draftText ? <ReactMarkdown>{draftText}</ReactMarkdown> : <p className="text-muted-foreground">生成后将在这里预览。</p>}
+            </div>
+          </div>
+        </div>
+
+        {feedback ? (
+          <div className="markdown-preview rounded-md border bg-card p-4 text-sm">
+            <ReactMarkdown>{feedback}</ReactMarkdown>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function mockInterviewOutline(project: ProjectRecord, form: InterviewOutlineForm): InterviewOutline {
   const target = form.targetType === "自定义对象" ? form.customTarget || "自定义对象" : form.targetType;
   const focus = form.focusQuestions || `围绕${project.theme}了解实际情况、主要困难和改进建议。`;
@@ -1298,4 +1557,99 @@ ${topicTitle}——基于${project.location}社会实践调研的分析
 - ${notes.length ? "已有访谈纪要，可支撑发现章节。" : "缺少访谈纪要，建议先基于访谈文本生成纪要。"}
 - ${summarizedMaterials ? "已有资料摘要，可用于报告材料点。" : "资料摘要不足，建议在资料库中生成 mock 摘要。"}
 `;
+}
+
+function mockReportDraft(project: ProjectRecord, materials: MaterialItem[], notes: InterviewNote[], outline: string, options: ReportDraftOptions) {
+  const targetLength = options.lengthOption === "自定义" ? options.customLength || "自定义字数" : options.lengthOption;
+  const topicTitle = project.selectedTopic?.title || `${project.location}${project.theme}实践调研`;
+  const researchQuestion = project.selectedTopic?.researchQuestion || `围绕${project.theme}梳理现状、问题与改进路径。`;
+  const noteSummary = notes.length
+    ? notes.slice(0, 3).map((note) => `${note.form.intervieweeIdentity || "访谈对象"}围绕“${note.form.interviewTopic || project.theme}”提供了一线反馈`).join("；")
+    : "目前尚未保存访谈纪要，初稿中的访谈发现为占位式 mock 表述。";
+  const materialSummary = materials.length
+    ? materials.slice(0, 4).map((item) => `《${item.title}》（${item.type}）`).join("、")
+    : "暂无资料库材料";
+  const outlineHint = outline.split("\n").filter((line) => line.startsWith("## ") || line.startsWith("### ")).slice(0, 8).join("；") || "暂无明确大纲层级";
+
+  return `# ${topicTitle}调研报告初稿
+
+> 写作要求：${targetLength}；写作风格：${options.style}。本初稿为 mock 版本，用于验证报告生成流程，不代表真实 AI 写作结果。
+
+## 摘要
+本报告围绕“${project.theme}”展开，以${project.location}为实践地点，结合项目基础信息、主选题、调研方案、资料库材料和访谈纪要，对当地相关实践的现状、问题与改进路径进行初步梳理。报告重点回应研究问题：“${researchQuestion}”。现有材料显示，${noteSummary}。后续可在补充更多材料和核验事实后，形成更完整的正式报告。
+
+## 关键词
+${[project.theme, project.location, project.practiceType, "社会实践", "调研报告"].filter(Boolean).map((item) => `- ${item}`).join("\n")}
+
+## 引言
+高校社会实践不仅是学生理解社会、连接基层的重要方式，也是围绕现实议题开展问题研究和行动服务的有效路径。本项目“${project.name}”以“${project.theme}”为核心主题，预期成果为“${project.expectedOutcome}”。本报告初稿基于当前已保存的报告大纲进行展开，重点将资料库材料、访谈纪要和调研方案中的信息转化为结构化文字。
+
+## 调研背景
+从项目基础信息看，本次实践类型为“${project.practiceType}”，实践地点为${project.location}，实践时间为${project.startDate.slice(0, 10)}至${project.endDate.slice(0, 10)}。围绕“${topicTitle}”这一主选题，团队需要回答的问题是：${researchQuestion}
+
+报告大纲中已经形成的写作线索包括：${outlineHint}。这些线索为初稿提供了章节安排和论证方向。
+
+## 调研方法
+本阶段初稿默认采用文本资料整理、访谈纪要归纳和调研方案复用三类方法。资料库中当前可使用材料包括：${materialSummary}。访谈纪要数量为 ${notes.length} 份，资料数量为 ${materials.length} 份。
+
+若后续继续完善，应补充访谈对象样本说明、问卷或观察记录说明，并明确材料的时间、地点、来源和可信度。
+
+## 调研发现
+第一，当前材料初步反映出${project.location}在“${project.theme}”方面已有一定实践基础，但不同主体的感受和参与程度可能存在差异。
+
+第二，访谈纪要提供了一线视角：${noteSummary}
+
+第三，资料库材料能够为报告提供背景、事实和案例支撑。特别是已生成摘要的资料，可用于提炼“可用于报告的材料点”和“关联研究问题”。
+
+## 问题分析
+围绕主研究问题“${researchQuestion}”，当前初稿可以从以下角度展开分析：
+
+1. 主体协同：不同部门、基层组织、群众或实践队之间是否形成稳定合作。
+2. 资源配置：人力、资金、信息和场地等资源是否支撑长期运行。
+3. 执行落地：政策或项目安排是否真正转化为可感知的服务或变化。
+4. 反馈机制：群众和一线工作人员的反馈是否能进入后续改进。
+
+这些分析仍需要更多可引用原话、具体案例和数据材料进一步支撑。
+
+## 对策建议
+第一，围绕调研发现建立问题清单，将访谈纪要中的高频反馈转化为可执行改进事项。
+
+第二，完善多主体协同机制，明确高校实践队、基层组织、政府工作人员和群众之间的分工。
+
+第三，加强材料沉淀，将政策文件、新闻资料、实践日志和访谈文本统一整理到资料库，并持续生成摘要。
+
+第四，面向后续报告完善证据链，优先补充能回应主研究问题的典型案例、直接引语和可核验数据。
+
+## 结论
+总体来看，本项目已经具备从“调研前准备”走向“报告写作”的基本材料基础。主选题为报告提供了问题意识，调研方案提供了执行框架，资料库和访谈纪要提供了事实材料。后续工作应继续补充材料、核验来源、细化案例，并将 mock 初稿进一步改写为正式报告文本。
+
+## 材料不足提示
+- ${project.selectedTopic ? "已有主选题，可继续围绕研究问题展开论证。" : "缺少主选题，建议先确认主选题。"}
+- ${project.researchPlan ? "已有调研方案，可继续提炼方法和日程信息。" : "缺少调研方案，建议先生成并保存。"}
+- ${outline ? "已有报告大纲，本初稿已参考其章节线索。" : "缺少报告大纲，建议先生成大纲。"}
+- ${materials.length ? `已有 ${materials.length} 份资料，但仍建议补充不同类型材料。` : "缺少资料库材料，建议新增文本资料。"}
+- ${notes.length ? `已有 ${notes.length} 份访谈纪要，可继续提炼原话和案例。` : "缺少访谈纪要，建议先基于访谈文本生成纪要。"}
+- 当前为 mock 初稿，尚未进行真实 AI 写作、事实核验和引用规范处理。`;
+}
+
+function mockReportPolishFeedback(draft: string, options: ReportDraftOptions) {
+  const lengthHint = draft.length > 1000 ? "当前文本已有一定篇幅，可重点压缩重复表述并增强段落衔接。" : "当前文本较短，可补充案例、数据和访谈原话。";
+  return `## AI润色反馈（mock）
+
+- 写作风格：建议继续贴近“${options.style}”的表达方式。
+- 结构建议：保留“摘要—背景—方法—发现—分析—建议—结论”的顺序，便于评审快速理解。
+- 语言建议：减少泛泛表述，多使用“材料显示”“访谈对象提到”“资料库记录”等证据提示语。
+- 篇幅建议：${lengthHint}
+- 下一步：可将“调研发现”和“问题分析”部分进一步拆成带小标题的段落。`;
+}
+
+function mockReportSupportCheck(project: ProjectRecord | null, materials: MaterialItem[], notes: InterviewNote[], outline: string) {
+  return `## 材料支撑检查（mock）
+
+- 主选题支撑：${project?.selectedTopic ? "已有主选题，初稿可以围绕研究问题展开。" : "缺少主选题，报告问题意识会偏弱。"}
+- 报告大纲支撑：${outline ? "已有报告大纲，章节结构具备基础。" : "缺少报告大纲，建议先生成大纲。"}
+- 资料库支撑：当前有 ${materials.length} 份资料，其中 ${materials.filter((item) => item.summary).length} 份已有摘要。
+- 访谈纪要支撑：当前有 ${notes.length} 份访谈纪要，可用于调研发现和案例部分。
+- 风险提示：mock 检查不会验证事实真伪，也不会判断引用是否准确。
+- 补强建议：优先补充政策文件、典型案例、可引用原话和带来源的数据。`;
 }

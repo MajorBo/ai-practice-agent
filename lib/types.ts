@@ -117,6 +117,24 @@ export type ReportOutline = {
   savedAt: string;
 };
 
+export type ReportDraftLengthOption = "3000字" | "5000字" | "8000字" | "自定义";
+
+export type ReportDraftStyle = "高校社会实践报告" | "政策调研报告" | "课程论文式" | "评优答辩式";
+
+export type ReportDraftOptions = {
+  lengthOption: ReportDraftLengthOption;
+  customLength: string;
+  style: ReportDraftStyle;
+};
+
+export type ReportDraft = {
+  markdown: string;
+  options: ReportDraftOptions;
+  polishFeedback: string;
+  supportCheck: string;
+  savedAt: string;
+};
+
 export type ProjectRecord = ProjectInput & {
   id: string;
   stage: string;
