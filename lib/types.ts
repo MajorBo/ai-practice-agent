@@ -1,4 +1,4 @@
-export type ProjectInput = {
+﻿export type ProjectInput = {
   name: string;
   practiceType: string;
   theme: string;
@@ -51,6 +51,36 @@ export type InterviewOutline = {
   sensitiveAlternatives: string[];
   closing: string;
   noteTips: string[];
+};
+
+export type MaterialType = "访谈文本" | "政策文件" | "实践日志" | "新闻资料" | "其他";
+
+export type MaterialItem = {
+  id: string;
+  title: string;
+  type: MaterialType;
+  source: string;
+  content: string;
+  tags: string[];
+  summary: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MaterialForm = {
+  title: string;
+  type: MaterialType;
+  source: string;
+  content: string;
+  tags: string;
+};
+
+export type MaterialSummary = {
+  contentSummary: string;
+  keywords: string[];
+  reportPoints: string[];
+  relatedResearchQuestions: string[];
+  gaps: string[];
 };
 
 export type ProjectRecord = ProjectInput & {
