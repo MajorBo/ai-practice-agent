@@ -3,6 +3,8 @@ import { generateInterviewOutlineWithAI, getAIProviderStatus } from "@/lib/ai/ai
 import { getProject } from "@/lib/projectStore";
 import type { InterviewOutlineForm } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: Request, { params }: { params: { id: string } }) {
   try {
     const project = await getProject(params.id);
