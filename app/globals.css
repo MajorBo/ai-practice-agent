@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 210 20% 98%;
+  --foreground: 218 28% 14%;
+  --card: 0 0% 100%;
+  --card-foreground: 218 28% 14%;
+  --primary: 199 89% 32%;
+  --primary-foreground: 0 0% 100%;
+  --muted: 205 32% 92%;
+  --muted-foreground: 215 16% 38%;
+  --border: 210 18% 84%;
+  --destructive: 0 72% 46%;
+  --destructive-foreground: 0 0% 100%;
+  --radius: 8px;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3 {
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-preview h1 {
+  font-size: 1.5rem;
+}
+
+.markdown-preview h2 {
+  font-size: 1.2rem;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  margin-left: 1.25rem;
+  list-style-position: outside;
+}
+
+.markdown-preview ul {
+  list-style-type: disc;
+}
+
+.markdown-preview ol {
+  list-style-type: decimal;
+}
+
+.markdown-preview p {
+  margin: 0.5rem 0;
+}

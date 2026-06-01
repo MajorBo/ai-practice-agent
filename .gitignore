@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.local
+dist
+coverage
+*.tsbuildinfo
+work/preview-db.json
+work/*.log

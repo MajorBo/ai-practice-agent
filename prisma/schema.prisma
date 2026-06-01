@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id               String   @id @default(cuid())
+  name             String
+  practiceType     String
+  theme            String
+  location         String
+  startDate        DateTime
+  endDate          DateTime
+  teamSize         Int
+  expectedOutcome  String
+  requirements     String?
+  stage            String   @default("调研前准备")
+  topics           Json?
+  selectedTopic    Json?
+  researchPlan     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
