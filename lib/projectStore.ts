@@ -1,8 +1,6 @@
-﻿import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import type { ProjectInput, ProjectRecord, TopicCandidate } from "@/lib/types";
 
 const storeDir = path.join(process.cwd(), "work");
@@ -10,6 +8,11 @@ const storePath = path.join(storeDir, "projects-store.json");
 
 function shouldUsePrisma() {
   return Boolean(process.env.DATABASE_URL);
+}
+
+async function getPrismaClient() {
+  const { prisma } = await import("@/lib/prisma");
+  return prisma;
 }
 
 type LocalDb = {
@@ -52,6 +55,7 @@ function toProjectRecord(project: any): ProjectRecord {
 
 export async function listProjects() {
   if (shouldUsePrisma()) {
+    const prisma = await getPrismaClient();
     return prisma.project.findMany({
       orderBy: { updatedAt: "desc" },
       select: {
@@ -81,6 +85,7 @@ export async function listProjects() {
 
 export async function createProject(input: ProjectInput) {
   if (shouldUsePrisma()) {
+    const prisma = await getPrismaClient();
     return prisma.project.create({
       data: {
         ...input,
@@ -112,6 +117,7 @@ export async function createProject(input: ProjectInput) {
 
 export async function getProject(id: string) {
   if (shouldUsePrisma()) {
+    const prisma = await getPrismaClient();
     const project = await prisma.project.findUnique({ where: { id } });
     return project ? toProjectRecord(project) : null;
   }
@@ -122,6 +128,7 @@ export async function getProject(id: string) {
 
 export async function updateProject(id: string, data: Partial<ProjectRecord>) {
   if (shouldUsePrisma()) {
+    const [{ Prisma }, prisma] = await Promise.all([import("@prisma/client"), getPrismaClient()]);
     const prismaData: Record<string, unknown> = { ...data };
     if ("topics" in data) prismaData.topics = data.topics as any;
     if ("selectedTopic" in data) prismaData.selectedTopic = data.selectedTopic === null ? Prisma.JsonNull : (data.selectedTopic as any);
