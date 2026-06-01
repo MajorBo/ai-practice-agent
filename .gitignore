@@ -7,3 +7,4 @@ coverage
 *.tsbuildinfo
 work/preview-db.json
 work/*.log
+work/projects-store.json

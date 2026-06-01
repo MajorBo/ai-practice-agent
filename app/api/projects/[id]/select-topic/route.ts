@@ -1,22 +1,27 @@
-import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+﻿import { NextResponse } from "next/server";
+import { updateProject } from "@/lib/projectStore";
 import type { TopicCandidate } from "@/lib/types";
 
 export async function POST(request: Request, { params }: { params: { id: string } }) {
-  const body = (await request.json()) as { topic: TopicCandidate };
+  try {
+    const body = (await request.json()) as { topic: TopicCandidate };
 
-  if (!body.topic?.title) {
-    return NextResponse.json({ error: "请选择有效选题" }, { status: 400 });
-  }
-
-  const updated = await prisma.project.update({
-    where: { id: params.id },
-    data: {
-      selectedTopic: body.topic as unknown as Prisma.InputJsonValue,
-      stage: "调研方案"
+    if (!body.topic?.title) {
+      return NextResponse.json({ error: "请选择有效选题" }, { status: 400 });
     }
-  });
 
-  return NextResponse.json(updated);
+    const updated = await updateProject(params.id, {
+      selectedTopic: body.topic,
+      stage: "调研方案"
+    });
+
+    if (!updated) {
+      return NextResponse.json({ error: "项目不存在" }, { status: 404 });
+    }
+
+    return NextResponse.json(updated);
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "主选题保存失败" }, { status: 500 });
+  }
 }

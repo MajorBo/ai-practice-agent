@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+﻿import { NextResponse } from "next/server";
+import { createProject, listProjects } from "@/lib/projectStore";
 import type { ProjectInput } from "@/lib/types";
 
 function toProjectInput(body: Partial<ProjectInput>): ProjectInput {
@@ -43,37 +43,28 @@ function validateProject(input: ProjectInput) {
 }
 
 export async function GET() {
-  const projects = await prisma.project.findMany({
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      practiceType: true,
-      location: true,
-      stage: true,
-      updatedAt: true
-    }
-  });
-
-  return NextResponse.json(projects);
+  try {
+    return NextResponse.json(await listProjects());
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "项目列表加载失败" }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as Partial<ProjectInput>;
-  const input = toProjectInput(body);
-  const validationError = validateProject(input);
+  try {
+    const body = (await request.json()) as Partial<ProjectInput>;
+    const input = toProjectInput(body);
+    const validationError = validateProject(input);
 
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
-  }
-
-  const project = await prisma.project.create({
-    data: {
-      ...input,
-      startDate: new Date(input.startDate),
-      endDate: new Date(input.endDate)
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
     }
-  });
 
-  return NextResponse.json(project, { status: 201 });
+    const project = await createProject(input);
+    return NextResponse.json(project, { status: 201 });
+  } catch (error) {
+    console.error(error);
+    return NextResponse.json({ error: "项目创建失败" }, { status: 500 });
+  }
 }
