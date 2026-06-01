@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI实践调研Agent HTML版</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --text: #172033;
+      --muted: #5d6b7a;
+      --line: #d8e1ea;
+      --primary: #0877a6;
+      --soft: #e8f2f7;
+      --card: #ffffff;
+      --danger: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--primary); text-decoration: none; }
+    button, input, textarea, select { font: inherit; }
+    button { cursor: pointer; }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px; }
+    .hero { min-height: 80vh; display: flex; flex-direction: column; justify-content: center; }
+    .eyebrow { color: var(--primary); font-weight: 700; font-size: 14px; }
+    h1 { font-size: 42px; margin: 10px 0 14px; }
+    h2 { margin: 0 0 10px; }
+    h3 { margin: 0 0 8px; }
+    .muted { color: var(--muted); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      border: 1px solid var(--primary);
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-weight: 700;
+    }
+    .btn.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    .btn.ghost { background: transparent; color: var(--text); border-color: transparent; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .grid { display: grid; gap: 16px; }
+    .form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .full { grid-column: 1 / -1; }
+    label { display: grid; gap: 7px; font-size: 14px; font-weight: 700; }
+    input, textarea, select {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    .workspace { display: grid; grid-template-columns: 220px 1fr 280px; gap: 18px; align-items: start; }
+    .nav { display: grid; gap: 8px; }
+    .nav button { width: 100%; text-align: left; justify-content: flex-start; }
+    .nav button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .topic { border: 1px solid var(--line); border-radius: 8px; padding: 16px; background: #fff; }
+    .pill { display: inline-block; background: var(--soft); border-radius: 999px; padding: 3px 9px; margin: 3px; font-size: 12px; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .markdown {
+      min-height: 360px;
+      white-space: pre-wrap;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }
+    .hidden { display: none !important; }
+    .error { color: var(--danger); }
+    @media (max-width: 920px) {
+      .workspace, .form, .two { grid-template-columns: 1fr; }
+      h1 { font-size: 34px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    const storageKey = "ai-practice-agent-html";
+    const targetTypes = ["基层干部", "村干部/社区干部", "驻村干部", "普通群众", "政府工作人员", "专家学者", "自定义对象"];
+    let state = loadState();
+    let currentView = "home";
+    let currentProjectId = null;
+    let activeModule = "topics";
+
+    function loadState() {
+      try {
+        return JSON.parse(localStorage.getItem(storageKey)) || { projects: [] };
+      } catch {
+        return { projects: [] };
+      }
+    }
+
+    function saveState() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function uid() {
+      return crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+    }
+
+    function escapeHtml(value = "") {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function navigate(view, id) {
+      currentView = view;
+      currentProjectId = id || null;
+      render();
+    }
+
+    function render() {
+      const app = document.querySelector("#app");
+      if (currentView === "projects") app.innerHTML = projectsPage();
+      else if (currentView === "new") app.innerHTML = newProjectPage();
+      else if (currentView === "workspace") app.innerHTML = workspacePage(projectById(currentProjectId));
+      else app.innerHTML = homePage();
+    }
+
+    function homePage() {
+      return `<main class="wrap hero">
+        <p class="eyebrow">高校社会实践队调研助手</p>
+        <h1>AI实践调研Agent</h1>
+        <p class="muted">HTML 单文件版：项目创建、选题生成、方案保存、访谈提纲生成都保存在当前浏览器。</p>
+        <p>
+          <button class="btn" onclick="navigate('projects')">进入项目</button>
+          <button class="btn secondary" onclick="navigate('new')">新建项目</button>
+        </p>
+      </main>`;
+    }
+
+    function projectsPage() {
+      const list = state.projects.length
+        ? state.projects.map((project) => `<section class="card row">
+            <div>
+              <h2>${escapeHtml(project.name)}</h2>
+              <p class="muted">类型：${escapeHtml(project.practiceType)} ｜ 地点：${escapeHtml(project.location)} ｜ 阶段：${escapeHtml(project.stage)} ｜ 更新：${new Date(project.updatedAt).toLocaleString("zh-CN")}</p>
+            </div>
+            <button class="btn secondary" onclick="navigate('workspace','${project.id}')">进入项目</button>
+          </section>`).join("")
+        : `<section class="card"><h2>还没有项目</h2><p class="muted">创建第一个项目，开始调研准备。</p></section>`;
+
+      return `<main class="wrap grid">
+        <div class="row">
+          <div><p class="muted">项目列表</p><h1>社会实践调研项目</h1></div>
+          <button class="btn" onclick="navigate('new')">新建项目</button>
+        </div>
+        ${list}
+      </main>`;
+    }
+
+    function newProjectPage() {
+      return `<main class="wrap grid">
+        <button class="btn ghost" onclick="navigate('projects')">返回项目列表</button>
+        <h1>新建实践调研项目</h1>
+        <section class="card">
+          <form class="form" onsubmit="createProject(event)">
+            ${field("项目名称", "name")}
+            ${field("实践类型", "practiceType", "text", "乡村振兴")}
+            ${field("实践主题", "theme")}
+            ${field("实践地点", "location")}
+            ${field("实践开始时间", "startDate", "date")}
+            ${field("实践结束时间", "endDate", "date")}
+            ${field("团队人数", "teamSize", "number", "6")}
+            ${field("预期成果", "expectedOutcome")}
+            <label class="full">其他要求<textarea name="requirements"></textarea></label>
+            <p id="formError" class="full error"></p>
+            <button class="btn full" type="submit">创建项目</button>
+          </form>
+        </section>
+      </main>`;
+    }
+
+    function field(label, name, type = "text", value = "") {
+      return `<label>${label}<input required name="${name}" type="${type}" value="${escapeHtml(value)}" /></label>`;
+    }
+
+    function createProject(event) {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.target).entries());
+      const required = ["name", "practiceType", "theme", "location", "startDate", "endDate", "expectedOutcome"];
+      const missing = required.filter((key) => !data[key]);
+      if (missing.length || Number(data.teamSize) <= 0) {
+        document.querySelector("#formError").textContent = "请填写完整项目信息，团队人数需大于 0。";
+        return;
+      }
+      const project = {
+        ...data,
+        teamSize: Number(data.teamSize),
+        id: uid(),
+        stage: "调研前准备",
+        topics: [],
+        selectedTopic: null,
+        researchPlan: "",
+        interviewOutline: "",
+        interviewOutlineForm: {
+          targetType: "基层干部",
+          customTarget: "",
+          durationMinutes: 45,
+          hasSensitiveTopics: false,
+          focusQuestions: ""
+        },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      state.projects.unshift(project);
+      saveState();
+      navigate("workspace", project.id);
+    }
+
+    function projectById(id) {
+      return state.projects.find((project) => project.id === id);
+    }
+
+    function updateProject(project) {
+      project.updatedAt = new Date().toISOString();
+      saveState();
+      render();
+    }
+
+    function workspacePage(project) {
+      if (!project) return `<main class="wrap"><p class="error">项目不存在</p><button class="btn" onclick="navigate('projects')">返回项目列表</button></main>`;
+      return `<main class="wrap grid">
+        <button class="btn ghost" onclick="navigate('projects')">返回项目列表</button>
+        <div><h1>${escapeHtml(project.name)}</h1><p class="muted">当前阶段：${escapeHtml(project.stage)}</p></div>
+        <div class="workspace">
+          <aside class="card">
+            <h2>流程导航</h2>
+            <div class="nav">
+              <button class="btn secondary ${activeModule === "topics" ? "active" : ""}" onclick="setModule('topics')">选题设计</button>
+              <button class="btn secondary ${activeModule === "plan" ? "active" : ""}" onclick="setModule('plan')">调研方案</button>
+              <button class="btn secondary ${activeModule === "interview" ? "active" : ""}" onclick="setModule('interview')">访谈提纲</button>
+            </div>
+          </aside>
+          <section>${activeModule === "topics" ? topicsModule(project) : activeModule === "plan" ? planModule(project) : interviewModule(project)}</section>
+          <aside class="card">
+            <h2>AI助手</h2>
+            <p class="muted">HTML 版使用 mock 数据，不接真实 AI API，不接数据库。</p>
+            <p class="muted">数据保存在当前浏览器 localStorage。</p>
+          </aside>
+        </div>
+      </main>`;
+    }
+
+    function setModule(module) {
+      activeModule = module;
+      render();
+    }
+
+    function topicsModule(project) {
+      const topics = project.topics.length
+        ? project.topics.map((topic, index) => `<div class="topic grid">
+            <div class="row">
+              <div><h3>${escapeHtml(topic.title)}</h3><p class="muted">${escapeHtml(topic.researchQuestion)}</p></div>
+              <button class="btn secondary" onclick="selectTopic(${index})">${project.selectedTopic?.title === topic.title ? "已选为主选题" : "选择为主选题"}</button>
+            </div>
+            <p>${topic.interviewTargets.map((item) => `<span class="pill">${escapeHtml(item)}</span>`).join("")}</p>
+            <p>方法：${topic.methods.map(escapeHtml).join("、")} ｜ 可行性：${topic.feasibilityScore}/10 ｜ 创新性：${topic.innovationScore}/10 ｜ 难度：${topic.difficulty}</p>
+            <p class="muted">${escapeHtml(topic.reason)}</p>
+          </div>`).join("")
+        : `<div class="card muted">点击按钮生成候选选题。</div>`;
+
+      return `<div class="grid">
+        <section class="card row"><div><h2>选题设计</h2><p class="muted">生成 5 个候选选题，并选择一个作为主选题。</p></div><button class="btn" onclick="generateTopics()">生成5个候选选题</button></section>
+        ${topics}
+      </div>`;
+    }
+
+    function planModule(project) {
+      return `<section class="card grid">
+        <div class="row"><div><h2>调研方案</h2><p class="muted">基于主选题生成 Markdown 调研方案。</p></div><div><button class="btn secondary" onclick="savePlan()">保存编辑</button> <button class="btn" ${project.selectedTopic ? "" : "disabled"} onclick="generatePlan()">生成并保存方案</button></div></div>
+        ${project.selectedTopic ? `<p class="muted">主选题：${escapeHtml(project.selectedTopic.title)}</p>` : `<p class="error">请先在“选题设计”中选择主选题。</p>`}
+        <div class="two">
+          <div><h3>方案编辑</h3><textarea id="planText" style="width:100%;min-height:420px">${escapeHtml(project.researchPlan)}</textarea></div>
+          <div><h3>方案预览</h3><div class="card markdown">${escapeHtml(project.researchPlan || "生成后将在这里预览。")}</div></div>
+        </div>
+      </section>`;
+    }
+
+    function interviewModule(project) {
+      const form = project.interviewOutlineForm;
+      return `<section class="card grid">
+        <div class="row"><div><h2>访谈提纲</h2><p class="muted">选择访谈对象并填写约束，生成结构化访谈提纲。</p></div><div><button class="btn secondary" onclick="saveInterview()">保存提纲</button> <button class="btn" onclick="generateInterview()">生成访谈提纲</button></div></div>
+        <div class="form">
+          <label>访谈对象类型<select id="targetType" onchange="toggleCustomTarget()">${targetTypes.map((type) => `<option value="${type}" ${form.targetType === type ? "selected" : ""}>${type}</option>`).join("")}</select></label>
+          <label>访谈时长（分钟）<input id="durationMinutes" type="number" min="10" value="${escapeHtml(form.durationMinutes)}" /></label>
+          <label id="customTargetWrap" class="full ${form.targetType === "自定义对象" ? "" : "hidden"}">自定义对象<input id="customTarget" value="${escapeHtml(form.customTarget)}" placeholder="如：返乡创业青年、非遗传承人" /></label>
+          <label class="full" style="display:flex;gap:8px;align-items:center"><input id="hasSensitiveTopics" type="checkbox" ${form.hasSensitiveTopics ? "checked" : ""} /> 涉及敏感议题</label>
+          <label class="full">希望重点了解的问题<textarea id="focusQuestions">${escapeHtml(form.focusQuestions)}</textarea></label>
+        </div>
+        <div class="two">
+          <div><h3>提纲编辑</h3><textarea id="interviewText" style="width:100%;min-height:420px">${escapeHtml(project.interviewOutline)}</textarea></div>
+          <div><h3>提纲预览</h3><div class="card markdown">${escapeHtml(project.interviewOutline || "生成后将在这里预览。")}</div></div>
+        </div>
+      </section>`;
+    }
+
+    function generateTopics() {
+      const project = projectById(currentProjectId);
+      project.topics = Array.from({ length: 5 }, (_, index) => ({
+        title: `${project.location}${project.theme}调研选题 ${index + 1}`,
+        researchQuestion: `当地如何理解并参与${project.theme}，关键影响因素是什么？`,
+        interviewTargets: ["社区居民", "基层干部", "志愿组织负责人"],
+        methods: ["半结构访谈", "问卷调查", "现场观察"],
+        feasibilityScore: 9 - (index % 3),
+        innovationScore: 7 + (index % 3),
+        difficulty: ["低", "中", "高"][index % 3],
+        reason: "对象易触达，能形成定量与定性结合的实践材料。"
+      }));
+      project.selectedTopic = null;
+      project.researchPlan = "";
+      project.stage = "选题设计";
+      updateProject(project);
+    }
+
+    function selectTopic(index) {
+      const project = projectById(currentProjectId);
+      project.selectedTopic = project.topics[index];
+      project.stage = "调研方案";
+      activeModule = "plan";
+      updateProject(project);
+    }
+
+    function generatePlan() {
+      const project = projectById(currentProjectId);
+      if (!project.selectedTopic) return;
+      project.researchPlan = mockPlan(project);
+      project.stage = "方案已保存";
+      updateProject(project);
+    }
+
+    function savePlan() {
+      const project = projectById(currentProjectId);
+      project.researchPlan = document.querySelector("#planText").value;
+      project.stage = "方案已保存";
+      updateProject(project);
+    }
+
+    function toggleCustomTarget() {
+      document.querySelector("#customTargetWrap").classList.toggle("hidden", document.querySelector("#targetType").value !== "自定义对象");
+    }
+
+    function readInterviewForm() {
+      return {
+        targetType: document.querySelector("#targetType").value,
+        customTarget: document.querySelector("#customTarget")?.value || "",
+        durationMinutes: Number(document.querySelector("#durationMinutes").value || 45),
+        hasSensitiveTopics: document.querySelector("#hasSensitiveTopics").checked,
+        focusQuestions: document.querySelector("#focusQuestions").value
+      };
+    }
+
+    function generateInterview() {
+      const project = projectById(currentProjectId);
+      project.interviewOutlineForm = readInterviewForm();
+      project.interviewOutline = mockInterviewOutline(project, project.interviewOutlineForm);
+      project.stage = "访谈提纲";
+      updateProject(project);
+    }
+
+    function saveInterview() {
+      const project = projectById(currentProjectId);
+      project.interviewOutlineForm = readInterviewForm();
+      project.interviewOutline = document.querySelector("#interviewText").value;
+      project.stage = "访谈提纲";
+      updateProject(project);
+    }
+
+    function mockPlan(project) {
+      const topic = project.selectedTopic;
+      return `# ${topic.title}调研方案
+
+## 调研背景
+本项目围绕“${project.theme}”展开，实践地点为${project.location}。
+
+## 调研目的
+回答核心问题：${topic.researchQuestion}
+
+## 核心问题
+- 当地真实需求是什么？
+- 现有实践机制有哪些不足？
+- 高校实践队可以提出哪些建议？
+
+## 调研对象
+${topic.interviewTargets.map((x) => `- ${x}`).join("\n")}
+
+## 调研方法
+${topic.methods.map((x) => `- ${x}`).join("\n")}
+
+## 日程安排
+- 前期准备：确定对象与工具。
+- 实地调研：访谈、问卷、观察。
+- 资料整理：汇总数据与发现。
+
+## 成员分工
+- 负责人：统筹进度。
+- 访谈组：联系并访谈对象。
+- 资料组：整理材料。
+
+## 预期成果
+${project.expectedOutcome}
+
+## 风险预案
+- 准备备选访谈对象。
+- 每日复盘调研进度。`;
+    }
+
+    function mockInterviewOutline(project, form) {
+      const target = form.targetType === "自定义对象" ? form.customTarget || "自定义对象" : form.targetType;
+      const focus = form.focusQuestions || `围绕${project.theme}了解实际情况、主要困难和改进建议。`;
+      const sensitive = form.hasSensitiveTopics
+        ? ["将“是否存在矛盾/冲突”替换为“推进过程中有哪些需要协调的地方”。", "将“责任在谁”替换为“哪些环节还有进一步优化空间”。", "将“群众是否不满意”替换为“大家反馈比较集中的期待是什么”。"]
+        : ["本次访谈未标记敏感议题。如现场出现敏感内容，可使用更中性的描述方式继续追问。"];
+
+      return `# 访谈提纲
+
+## 开场白
+您好，我们是“${project.name}”社会实践团队，正在${project.location}围绕“${project.theme}”开展调研。本次访谈预计约 ${form.durationMinutes} 分钟，内容仅用于实践研究分析，我们会尊重您的真实表达并做好信息保护。
+
+## 基础信息问题
+1. 请您简单介绍一下自己的工作/生活背景，以及与“${project.theme}”相关的经历。
+2. 您平时接触${project.theme}相关事务的频率高吗？主要通过哪些渠道了解？
+3. 在您看来，近几年当地相关工作或生活环境发生了哪些变化？
+
+## 核心问题
+1. 围绕“${focus}”，您认为最值得关注的问题是什么？
+2. 从${target}的视角看，目前最明显的成效和不足分别是什么？
+3. 哪些主体在其中发挥了关键作用？他们之间的协同是否顺畅？
+4. 如果要让相关工作更可持续，您认为最需要优先改进的是什么？
+
+## 深度追问
+1. 您刚才提到的这个现象，有没有具体案例可以展开说说？
+2. 这个问题大概从什么时候开始变得明显？背后可能有哪些原因？
+3. 不同群体对这件事的看法是否一致？分歧主要在哪里？
+4. 如果资源有限，您觉得最先应该做哪一件事？为什么？
+
+## 敏感问题替代表达
+${sensitive.map((item) => `- ${item}`).join("\n")}
+
+## 结束语
+非常感谢您的分享。后续我们会对访谈内容进行整理归纳，如有需要补充或核对的信息，也希望能再次向您请教。
+
+## 记录提示
+- 记录原话中的关键词、具体案例、时间地点和涉及主体。
+- 区分事实描述、个人判断和改进建议，避免混在一起。
+- 敏感内容只记录研究必要信息，避免记录可识别个人隐私的细节。
+- 访谈结束后 30 分钟内补充现场观察和访谈员感受。`;
+    }
+
+    render();
+  </script>
+</body>
+</html>
