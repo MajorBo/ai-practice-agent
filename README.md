@@ -123,3 +123,23 @@ HTML 单文件版使用浏览器 `localStorage` 保存数据，不需要 Node.js
 ## Author
 
 本项目由马俊博主导设计与开发，使用 AI-assisted development 工具辅助实现。
+
+## Vercel 部署
+
+在 Vercel 导入 GitHub 仓库后，建议使用默认 Next.js 部署配置：
+
+- Framework Preset: `Next.js`
+- Install Command: `pnpm install`
+- Build Command: `pnpm build`
+- Output Directory: 保持默认
+
+需要在 Vercel Project Settings -> Environment Variables 中配置：
+
+```bash
+AI_PROVIDER=deepseek
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+```
+
+不要把真实 API Key 写入代码、README、`.env` 或 `.env.local`。`DEEPSEEK_API_KEY` 只应作为服务端环境变量配置；不要使用 `NEXT_PUBLIC_` 前缀。
+
+如果没有配置 `DEEPSEEK_API_KEY`，系统会自动使用 mock fallback，页面不会崩溃。

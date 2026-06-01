@@ -34,6 +34,7 @@ const materialTypes: MaterialType[] = ["访谈文本", "政策文件", "实践�
 
 type ModuleKey = "topics" | "plan" | "interview" | "materials" | "notes" | "outline" | "draft";
 type InterviewGenerationSource = "idle" | "ai" | "mock-missing-key" | "mock-api-error";
+type PlanGenerationSource = "idle" | "ai" | "mock-missing-key" | "mock-api-error";
 
 const defaultInterviewForm: InterviewOutlineForm = {
   targetType: "基层干部",
@@ -77,6 +78,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
   const [planDraft, setPlanDraft] = useState("");
+  const [planGenerationSource, setPlanGenerationSource] = useState<PlanGenerationSource>("idle");
   const [interviewForm, setInterviewForm] = useState<InterviewOutlineForm>(defaultInterviewForm);
   const [interviewDraft, setInterviewDraft] = useState("");
   const [interviewSavedAt, setInterviewSavedAt] = useState("");
@@ -253,8 +255,30 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
     runAction(`/api/projects/${params.id}/select-topic`, "select-topic", { topic });
   }
 
-  function generatePlan() {
-    runAction(`/api/projects/${params.id}/plan`, "plan");
+  async function generatePlan() {
+    setActionLoading("plan");
+    setError("");
+
+    try {
+      const response = await fetch(`/api/projects/${params.id}/plan`, {
+        method: "POST"
+      });
+      const data = (await response.json()) as ProjectRecord & { generationSource?: PlanGenerationSource; error?: string };
+
+      if (!response.ok) {
+        throw new Error(data.error || "方案生成失败");
+      }
+
+      setProject(data);
+      setPlanDraft(data.researchPlan || "");
+      setPlanGenerationSource(data.generationSource || "mock-api-error");
+      if (data.selectedTopic) setActiveModule("plan");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "方案生成失败");
+      setPlanGenerationSource("mock-api-error");
+    } finally {
+      setActionLoading("");
+    }
   }
 
   async function savePlan() {
@@ -670,7 +694,7 @@ export default function ProjectWorkspacePage({ params }: { params: { id: string 
         <section className="min-w-0">
           {error ? <p className="mb-4 rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
           {activeModule === "topics" ? <TopicModule loading={actionLoading} onGenerate={generateTopics} onSelect={selectTopic} project={project} /> : null}
-          {activeModule === "plan" ? <PlanModule loading={actionLoading} onGenerate={generatePlan} onSave={savePlan} planDraft={planDraft} project={project} setPlanDraft={setPlanDraft} /> : null}
+          {activeModule === "plan" ? <PlanModule loading={actionLoading} onGenerate={generatePlan} onSave={savePlan} planDraft={planDraft} project={project} setPlanDraft={setPlanDraft} source={planGenerationSource} /> : null}
           {activeModule === "interview" ? (
             <InterviewModule
               form={interviewForm}
@@ -825,7 +849,16 @@ function TopicModule({ loading, onGenerate, onSelect, project }: { loading: stri
   );
 }
 
-function PlanModule({ loading, onGenerate, onSave, planDraft, project, setPlanDraft }: { loading: string; onGenerate: () => void; onSave: () => void; planDraft: string; project: ProjectRecord; setPlanDraft: (value: string) => void }) {
+function PlanModule({ loading, onGenerate, onSave, planDraft, project, setPlanDraft, source }: { loading: string; onGenerate: () => void; onSave: () => void; planDraft: string; project: ProjectRecord; setPlanDraft: (value: string) => void; source: PlanGenerationSource }) {
+  const sourceText =
+    source === "ai"
+      ? "当前方案由真实 AI 生成"
+      : source === "mock-missing-key"
+        ? "未配置 API Key，当前使用 mock fallback"
+        : source === "mock-api-error"
+          ? "AI 调用失败，当前使用 mock fallback"
+          : "";
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
@@ -836,6 +869,7 @@ function PlanModule({ loading, onGenerate, onSave, planDraft, project, setPlanDr
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 xl:grid-cols-2">
+        {sourceText ? <p className="w-fit rounded-full border bg-muted px-3 py-1 text-xs text-muted-foreground xl:col-span-2">{sourceText}</p> : null}
         {!project.selectedTopic ? <div className="xl:col-span-2 rounded-lg border border-dashed p-8 text-center text-muted-foreground">请先在“选题设计”中选择一个主选题。</div> : <><div><p className="mb-2 text-sm font-medium">Markdown 编辑</p><Textarea className="min-h-[520px] font-mono" onChange={(event) => setPlanDraft(event.target.value)} value={planDraft} /></div><div><p className="mb-2 text-sm font-medium">方案预览</p><div className="markdown-preview min-h-[520px] rounded-md border bg-background p-4 text-sm">{planDraft ? <ReactMarkdown>{planDraft}</ReactMarkdown> : <p className="text-muted-foreground">生成后将在这里预览。</p>}</div></div></>}
       </CardContent>
     </Card>

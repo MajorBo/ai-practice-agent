@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import type { InterviewOutlineForm, ProjectInput, ProjectRecord, TopicCandidate } from "@/lib/types";
-import { buildInterviewOutlinePrompt, buildTopicPrompt } from "./prompts";
+import type { InterviewOutlineForm, ProjectInput, ProjectRecord, ResearchPlanPayload, TopicCandidate } from "@/lib/types";
+import { buildInterviewOutlinePrompt, buildResearchPlanPrompt, buildTopicPrompt } from "./prompts";
 
 type JsonResult<T> =
   | { ok: true; data: T; raw: string }
@@ -64,11 +64,10 @@ function stripJsonFence(raw: string) {
     .trim();
 }
 
-export function cleanInterviewOutlineMarkdown(raw: string) {
+function cleanMarkdownIntro(raw: string, headingPattern: RegExp) {
   try {
     const trimmed = raw.trim();
     const introPattern = /^(以下是|当然可以|根据你的需求|根据您提供|我为你|我为您|我已|好的|下面是|这是)/;
-    const headingPattern = /^#{1,3}\s*(访谈提纲|暖场问题|事实性问题|过程性问题|案例追问|矛盾\/困难追问|困难\/矛盾追问|敏感问题替代表达|结束确认问题|记录提示)/m;
     const headingMatch = trimmed.match(headingPattern);
 
     if (introPattern.test(trimmed) && headingMatch?.index && headingMatch.index > 0) {
@@ -84,6 +83,20 @@ export function cleanInterviewOutlineMarkdown(raw: string) {
   } catch {
     return raw;
   }
+}
+
+export function cleanInterviewOutlineMarkdown(raw: string) {
+  return cleanMarkdownIntro(
+    raw,
+    /^#{1,3}\s*(访谈提纲|暖场问题|事实性问题|过程性问题|案例追问|矛盾\/困难追问|困难\/矛盾追问|敏感问题替代表达|结束确认问题|记录提示)/m
+  );
+}
+
+export function cleanResearchPlanMarkdown(raw: string) {
+  return cleanMarkdownIntro(
+    raw,
+    /^#{1,3}\s*(调研方案|一、调研背景|二、调研目标|三、核心研究问题|四、调研对象|五、调研方法|六、调研日程安排|七、团队分工建议|八、预期成果|九、风险与伦理预案|十、材料补充清单)/m
+  );
 }
 
 export async function generateTopicCandidatesWithAI(project: ProjectInput): Promise<TopicCandidate[] | null> {
@@ -107,6 +120,21 @@ export async function generateTopicCandidatesWithAI(project: ProjectInput): Prom
   }
 
   return Array.isArray(parsed.data.topics) ? parsed.data.topics : null;
+}
+
+export async function generateResearchPlanWithAI(payload: ResearchPlanPayload): Promise<string | null> {
+  const raw = await chat([
+    {
+      role: "system",
+      content: "你是高校社会实践调研方案专家。请直接输出可执行的 Markdown 调研方案，不要写前言或解释。"
+    },
+    {
+      role: "user",
+      content: buildResearchPlanPrompt(payload)
+    }
+  ]);
+
+  return raw ? cleanResearchPlanMarkdown(raw) : null;
 }
 
 export async function generateInterviewOutlineWithAI(project: ProjectRecord, form: InterviewOutlineForm): Promise<string | null> {

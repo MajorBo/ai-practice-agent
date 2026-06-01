@@ -1,7 +1,10 @@
-﻿import { NextResponse } from "next/server";
-import { generateResearchPlan } from "@/lib/aiService";
+import { NextResponse } from "next/server";
+import { generateResearchPlanWithAI, getAIProviderStatus } from "@/lib/ai/aiService";
+import { mockPlan } from "@/lib/aiService";
 import { getProject, updateProject } from "@/lib/projectStore";
-import type { ProjectInput, TopicCandidate } from "@/lib/types";
+import type { ProjectInput, ResearchPlanPayload, TopicCandidate } from "@/lib/types";
+
+type GenerationSource = "ai" | "mock-missing-key" | "mock-api-error";
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -27,18 +30,41 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       expectedOutcome: project.expectedOutcome,
       requirements: project.requirements || ""
     };
-
-    const researchPlan = await generateResearchPlan({
+    const payload: ResearchPlanPayload = {
       project: projectInput,
       selectedTopic: project.selectedTopic as TopicCandidate
-    });
+    };
+
+    const status = getAIProviderStatus();
+    const hasConfiguredKey = status.provider === "openai" ? status.hasOpenAIKey : status.hasDeepSeekKey;
+    let generationSource: GenerationSource = "mock-missing-key";
+    let researchPlan: string;
+
+    if (!hasConfiguredKey) {
+      researchPlan = mockPlan(payload);
+    } else {
+      try {
+        const aiPlan = await generateResearchPlanWithAI(payload);
+        if (aiPlan) {
+          researchPlan = aiPlan;
+          generationSource = "ai";
+        } else {
+          researchPlan = mockPlan(payload);
+          generationSource = "mock-api-error";
+        }
+      } catch (error) {
+        console.error("Falling back to mock research plan:", error);
+        researchPlan = mockPlan(payload);
+        generationSource = "mock-api-error";
+      }
+    }
 
     const updated = await updateProject(params.id, {
       researchPlan,
       stage: "方案已保存"
     });
 
-    return NextResponse.json(updated);
+    return NextResponse.json({ ...updated, generationSource });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "方案生成失败" }, { status: 500 });
